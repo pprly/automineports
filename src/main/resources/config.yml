@@ -1,0 +1,24 @@
+# BoatRoutes Configuration
+
+# Pathfinding settings
+pathfinding:
+  max-distance: 500        # Maximum pathfinding distance for Stage 1
+  safety-radius: 3         # Blocks away from land
+  min-depth: 2             # Minimum water depth
+  max-iterations: 50000    # A* protection limit
+
+# Port settings
+port:
+  docks-per-port: 3        # Number of docks per port
+  
+# Boat settings
+boat:
+  default-speed: 0.35      # Default boat speed (blocks per tick)
+  max-velocity: 4.0        # Maximum velocity cap
+  
+# GUI settings
+gui:
+  update-interval: 20      # Ticks between GUI updates
+  
+# Debug mode
+debug: false

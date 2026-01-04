@@ -1,0 +1,20 @@
+name: BoatRoutes
+version: '${version}'
+main: com.example.boatroutes.BoatRoutesPlugin
+description: Advanced boat transportation system with auto-pathfinding
+author: YourName
+api-version: '1.21'
+
+commands:
+  port:
+    description: Manage ports and routes
+    usage: /port <create|delete|list|info|connect|visualize> [args]
+    aliases: [ports]
+
+permissions:
+  boatroutes.admin:
+    description: Admin commands for ports
+    default: op
+  boatroutes.use:
+    description: Use boats and navigation
+    default: true
