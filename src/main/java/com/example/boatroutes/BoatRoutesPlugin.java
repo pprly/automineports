@@ -31,6 +31,10 @@ public class BoatRoutesPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         
+        getLogger().info("=================================");
+        getLogger().info("BoatRoutes v2.0 - BFS Edition");
+        getLogger().info("=================================");
+        
         getLogger().info("Initializing managers...");
         
         portManager = new PortManager(this);
@@ -56,8 +60,12 @@ public class BoatRoutesPlugin extends JavaPlugin {
         portManager.loadAllPorts();
         boatManager.loadAllBoats();
         routeManager.loadAllRoutes();
+        pathfindingManager.loadAllPaths();
         
+        getLogger().info("=================================");
         getLogger().info("BoatRoutes enabled successfully!");
+        getLogger().info("Features: BFS Pathfinding, Navigation Book");
+        getLogger().info("=================================");
     }
     
     @Override

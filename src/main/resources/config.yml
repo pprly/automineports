@@ -1,11 +1,28 @@
-# BoatRoutes Configuration
+# BoatRoutes v3.2 Configuration
 
 # Pathfinding settings
 pathfinding:
-  max-distance: 500        # Maximum pathfinding distance for Stage 1
-  safety-radius: 1         # Blocks away from land
+  max-distance: 5000       # Maximum pathfinding distance
+  safety-radius: 0         # Blocks away from land (0 = no safety margin)
   min-depth: 1             # Minimum water depth
-  max-iterations: 50000    # A* protection limit
+  max-iterations: 50000    # BFS protection limit
+  step-size: 2             # BFS step size in blocks
+  sea-level: 62            # Water level (Y coordinate)
+  async: true              # Run pathfinding asynchronously
+  pre-cache-radius: 500    # NEW! Radius around each port to pre-cache (blocks)
+
+# World caching
+cache:
+  enabled: true            # Enable world caching
+  auto-save: true          # Auto-save cache on path completion
+  save-interval: 300       # Auto-save every 5 minutes (seconds)
+
+# Navigable water finder
+navigable-water:
+  search-radius: 50        # Max radius to search for open water
+  min-water-area: 70       # Min % of water in 10x10 area
+  min-clear-directions: 6  # Min clear directions (out of 8)
+  direction-distance: 20   # Check distance in each direction
 
 # Port settings
 port:
