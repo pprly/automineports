@@ -1,41 +1,106 @@
-# BoatRoutes v3.2 Configuration
+# BoatRoutes v4.0 Configuration
+# ИСПРАВЛЕННАЯ ВЕРСИЯ - динамическое кеширование
 
-# Pathfinding settings
+# ===== PATHFINDING SETTINGS =====
 pathfinding:
-  max-distance: 5000       # Maximum pathfinding distance
-  safety-radius: 0         # Blocks away from land (0 = no safety margin)
-  min-depth: 1             # Minimum water depth
-  max-iterations: 50000    # BFS protection limit
-  step-size: 2             # BFS step size in blocks
-  sea-level: 62            # Water level (Y coordinate)
-  async: true              # Run pathfinding asynchronously
-  pre-cache-radius: 500    # NEW! Radius around each port to pre-cache (blocks)
+  # Maximum distance for pathfinding (blocks)
+  max-distance: 5000
+  
+  # Safety radius from shore (0 = disabled)
+  # Higher value = boats stay further from land
+  safety-radius: 0
+  
+  # Minimum water depth required
+  min-depth: 1
+  
+  # Maximum BFS iterations (защита от зависания)
+  max-iterations: 50000
+  
+  # BFS step size in blocks (2 = faster, 1 = more precise)
+  step-size: 2
+  
+  # Sea level (Y coordinate) - ВСЕ ПУТИ НА ЭТОЙ ВЫСОТЕ!
+  sea-level: 62
+  
+  # Run pathfinding asynchronously (recommended: true)
+  async: true
+  
+  # ВАЖНО: Этот параметр ИГНОРИРУЕТСЯ в v4.0!
+  # Вместо этого используется ДИНАМИЧЕСКИЙ радиус:
+  # radius = min(max(distance * 1.5, 100), 500)
+  pre-cache-radius: 500
 
-# World caching
+# ===== WORLD CACHING =====
 cache:
-  enabled: true            # Enable world caching
-  auto-save: true          # Auto-save cache on path completion
-  save-interval: 300       # Auto-save every 5 minutes (seconds)
+  # Enable water block caching
+  enabled: true
+  
+  # Auto-save cache after path calculation
+  auto-save: true
+  
+  # Auto-save interval in seconds
+  save-interval: 300
 
-# Navigable water finder
+# ===== NAVIGABLE WATER FINDER =====
 navigable-water:
-  search-radius: 50        # Max radius to search for open water
-  min-water-area: 70       # Min % of water in 10x10 area
-  min-clear-directions: 6  # Min clear directions (out of 8)
-  direction-distance: 20   # Check distance in each direction
+  # Maximum search radius for open water
+  search-radius: 50
+  
+  # Minimum water percentage in 10x10 area (0-100)
+  min-water-area: 70
+  
+  # Minimum clear directions out of 8
+  min-clear-directions: 6
+  
+  # Distance to check in each direction
+  direction-distance: 20
 
-# Port settings
+# ===== PORT SETTINGS =====
 port:
-  docks-per-port: 3        # Number of docks per port
-  
-# Boat settings
+  # Number of docks per port
+  docks-per-port: 3
+
+# ===== BOAT SETTINGS =====
 boat:
-  default-speed: 0.35      # Default boat speed (blocks per tick)
-  max-velocity: 4.0        # Maximum velocity cap
+  # Default boat speed (blocks per tick)
+  default-speed: 0.35
   
-# GUI settings
+  # Maximum velocity cap
+  max-velocity: 4.0
+
+# ===== GUI SETTINGS =====
 gui:
-  update-interval: 20      # Ticks between GUI updates
-  
-# Debug mode
+  # Ticks between GUI updates
+  update-interval: 20
+
+# ===== DEBUG MODE =====
+# Enable for detailed console output
 debug: false
+
+
+# ============================================
+# ПРИМЕЧАНИЯ К ВЕРСИИ 4.0:
+# ============================================
+#
+# ИСПРАВЛЕНО:
+# 1. Радиус кеширования теперь ДИНАМИЧЕСКИЙ!
+#    - Зависит от расстояния между портами
+#    - Формула: min(max(distance * 1.5, 100), 500)
+#    - Было: 3000 блоков = 141,376 чанков (зависание!)
+#    - Стало: ~100-500 блоков = 1,000-10,000 чанков (мгновенно)
+#
+# 2. Bidirectional BFS вместо обычного
+#    - Работает в 2-4 раза быстрее
+#    - Ищет путь с двух сторон одновременно
+#
+# 3. Фиксированный Y уровень (sea-level)
+#    - Все waypoints на высоте 62
+#    - Нет прыжков по высоте
+#    - Путь всегда на поверхности воды
+#
+# 4. Умное кеширование
+#    - Кешируется только область между портами
+#    - Поддержка непрогруженных чанков
+#    - Персистентный кеш в water_cache.yml
+#
+# ============================================

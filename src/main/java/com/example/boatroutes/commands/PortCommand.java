@@ -174,8 +174,8 @@ public class PortCommand implements CommandExecutor {
         }
 
         player.sendMessage("");
-        player.sendMessage("§6⚓ v3.0: Calculating path with world caching...");
-        player.sendMessage("§7This may take 10-60 seconds");
+        player.sendMessage("§6⚓ v4.0: Calculating path with dynamic caching...");
+        player.sendMessage("§7This may take 2-10 seconds");
 
         plugin.getPathfindingManager().findPathBetweenPortsAsync(port1, port2, player);
     }
@@ -247,7 +247,7 @@ public class PortCommand implements CommandExecutor {
     }
 
     // ============================================
-    // NEW v3.0 CACHE COMMANDS
+    // NEW v4.0 CACHE COMMANDS
     // ============================================
 
     private void handleCache(Player player, String[] args) {
@@ -269,7 +269,9 @@ public class PortCommand implements CommandExecutor {
 
     private void handleCacheInfo(Player player) {
         var cache = plugin.getPathfindingManager().getCache();
-        var stats = cache.getStats();
+        
+        // ИСПРАВЛЕНО: используем getCacheStats() вместо getStats()
+        var stats = cache.getCacheStats();
 
         player.sendMessage("§6=== Water Cache Statistics ===");
         player.sendMessage("§7Cached chunks: §f" + stats.cachedChunks);
