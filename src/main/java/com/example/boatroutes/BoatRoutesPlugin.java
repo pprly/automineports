@@ -4,6 +4,7 @@ import com.example.boatroutes.boat.BoatManager;
 import com.example.boatroutes.commands.PortCommand;
 import com.example.boatroutes.commands.PortTabCompleter;
 import com.example.boatroutes.dock.DockManager;
+import com.example.boatroutes.gui.GUIListener;
 import com.example.boatroutes.gui.GUIManager;
 import com.example.boatroutes.listeners.NPCListener;
 import com.example.boatroutes.listeners.PlayerListener;
@@ -15,13 +16,8 @@ import com.example.boatroutes.port.PortManager;
 import com.example.boatroutes.route.RouteManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/**
- * Main plugin class - ONLY initialization and dependency injection
- * DO NOT ADD LOGIC HERE!
- */
 public class BoatRoutesPlugin extends JavaPlugin {
     
-    // Managers (singletons)
     private PortManager portManager;
     private DockManager dockManager;
     private BoatManager boatManager;
@@ -33,10 +29,8 @@ public class BoatRoutesPlugin extends JavaPlugin {
     
     @Override
     public void onEnable() {
-        // 1. Save default config
         saveDefaultConfig();
         
-        // 2. Initialize managers (order matters!)
         getLogger().info("Initializing managers...");
         
         portManager = new PortManager(this);
@@ -48,18 +42,16 @@ public class BoatRoutesPlugin extends JavaPlugin {
         navigationManager = new NavigationManager(this);
         guiManager = new GUIManager(this);
         
-        // 3. Register commands
         getLogger().info("Registering commands...");
         getCommand("port").setExecutor(new PortCommand(this));
         getCommand("port").setTabCompleter(new PortTabCompleter(this));
         
-        // 4. Register event listeners
         getLogger().info("Registering listeners...");
         getServer().getPluginManager().registerEvents(new VehicleListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(new NPCListener(this), this);
+        getServer().getPluginManager().registerEvents(new GUIListener(this), this);
         
-        // 5. Load data from files
         getLogger().info("Loading data...");
         portManager.loadAllPorts();
         boatManager.loadAllBoats();
@@ -72,18 +64,14 @@ public class BoatRoutesPlugin extends JavaPlugin {
     public void onDisable() {
         getLogger().info("Saving data...");
         
-        // Save all data
         if (portManager != null) portManager.saveAllPorts();
         if (boatManager != null) boatManager.saveAllBoats();
         if (routeManager != null) routeManager.saveAllRoutes();
         
-        // Stop all active autopilots
         if (navigationManager != null) navigationManager.stopAllAutopilots();
         
         getLogger().info("BoatRoutes disabled!");
     }
-    
-    // === GETTERS FOR MANAGERS ===
     
     public PortManager getPortManager() {
         return portManager;
