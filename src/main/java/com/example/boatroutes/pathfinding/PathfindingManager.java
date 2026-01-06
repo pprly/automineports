@@ -11,70 +11,74 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * PathfindingManager v4.0 - Исправленная версия
+ * Pathfinding Manager - теперь с A*!
+ * ИСПРАВЛЕННАЯ ВЕРСИЯ - совместима с существующим кодом
  * 
- * Ключевые изменения:
- * - ДИНАМИЧЕСКИЙ радиус кеширования (зависит от расстояния)
- * - Умное кеширование: только нужная область между портами
- * - Быстрое предварительное кеширование
- * - Поддержка непрогруженных чанков через кеш
+ * WORKFLOW:
+ * 1. Find navigable water (SYNC)
+ * 2. Pre-cache smart region (SYNC)
+ * 3. Run A* pathfinding (ASYNC)
+ * 4. Optimize path (ASYNC)
+ * 5. Save route (SYNC)
  * 
  * @author BoatRoutes Team
- * @version 4.0
+ * @version 5.0-FIXED
  */
 public class PathfindingManager {
     
     private final BoatRoutesPlugin plugin;
-    private final WaterWorldCache cache;
-    private final WaterPathfinder pathfinder;
+    private final WaterPathfinderAStar pathfinder; // A* вместо BFS!
     private final PathOptimizer optimizer;
     private final PathStorage storage;
+    private final WaterWorldCache cache;
     
     public PathfindingManager(BoatRoutesPlugin plugin) {
         this.plugin = plugin;
         this.cache = new WaterWorldCache(plugin);
-        this.pathfinder = new WaterPathfinder(plugin, cache);
+        this.pathfinder = new WaterPathfinderAStar(plugin, cache); // A*!
+        
+        // ИСПРАВЛЕНО: PathOptimizer требует PathValidator
         this.optimizer = new PathOptimizer(pathfinder.getValidator());
         this.storage = new PathStorage(plugin);
         
-        // Загружаем сохранённые пути при старте
+        // Load existing routes
         storage.loadAllPaths();
         
-        plugin.getLogger().info("PathfindingManager v4.0 initialized");
+        plugin.getLogger().info("PathfindingManager v5.0 (A*) initialized");
     }
     
     /**
-     * Главный метод поиска пути между портами (async)
+     * Главный метод - поиск пути между портами (async)
      */
     public void findPathBetweenPortsAsync(Port fromPort, Port toPort, Player player) {
         String fromName = fromPort.getName();
         String toName = toPort.getName();
         
-        // Проверяем существующий путь
-        if (storage.hasPath(fromName, toName)) {
-            player.sendMessage("§e⚠ Path already exists!");
-            player.sendMessage("§7Use §e/port reconnect " + fromName + " " + toName + " §7to recalculate");
-            return;
-        }
-        
-        Location portStart = fromPort.getConvergencePoint();
-        Location portEnd = toPort.getSplitPoint();
-        
-        if (portStart == null || portEnd == null) {
-            player.sendMessage("§cPorts missing convergence/split points!");
-            return;
-        }
-        
-        player.sendMessage("");
-        player.sendMessage("§6⚓ BoatRoutes Pathfinding v4.0");
+        player.sendMessage("§e⚓ BoatRoutes Pathfinding v5.0 (A*)");
         player.sendMessage("§7Starting path calculation...");
         player.sendMessage("");
         
-        long totalStartTime = System.currentTimeMillis();
+        // ИСПРАВЛЕНО: используем getNPCLocation() (с большой NPC)
+        Location portStart = fromPort.getNPCLocation();
+        Location portEnd = toPort.getNPCLocation();
+        
+        if (portStart == null || portEnd == null) {
+            player.sendMessage("§cPorts missing NPC locations!");
+            return;
+        }
+        
+        // Используем convergence/split points если есть
+        if (fromPort.getConvergencePoint() != null) {
+            portStart = fromPort.getConvergencePoint();
+        }
+        if (toPort.getSplitPoint() != null) {
+            portEnd = toPort.getSplitPoint();
+        }
         
         // ===== PHASE 1: Find navigable water =====
         player.sendMessage("§7Phase 1: Finding navigable water...");
         
+        // ИСПРАВЛЕНО: используем правильную сигнатуру (Location, int)
         NavigableWaterFinder navFinder = pathfinder.getNavFinder();
         Location navStart = navFinder.findNavigableWater(portStart, 50);
         Location navEnd = navFinder.findNavigableWater(portEnd, 50);
@@ -97,124 +101,101 @@ public class PathfindingManager {
         
         player.sendMessage("§a✓ Phase 1 complete");
         
-        // ===== PHASE 2: Smart pre-caching =====
-        player.sendMessage("§7Phase 2: Pre-caching water data...");
+        // ===== PHASE 2: Minimal pre-cache (только старт/конец) =====
+        player.sendMessage("§7Phase 2: Pre-caching start points...");
         
         long preCacheStart = System.currentTimeMillis();
         
-        int distance = (int) navStart.distance(navEnd);
+        // Кешируем ТОЛЬКО область вокруг стартовых точек (50 блоков)
+        // A* будет динамически кешировать остальное во время поиска!
+        int localRadius = 50;
         
-        // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Динамический радиус!
-        // Формула: radius = max(distance * 1.5, 100), но не более 500
-        int dynamicRadius = Math.min(Math.max((int)(distance * 1.5), 100), 500);
+        plugin.getLogger().info("=== MINIMAL PRE-CACHING ===");
+        plugin.getLogger().info("  Caching only start/end areas (radius: " + localRadius + ")");
         
-        plugin.getLogger().info("=== SMART CACHING ===");
-        plugin.getLogger().info("  Distance: " + distance + " blocks");
-        plugin.getLogger().info("  Dynamic radius: " + dynamicRadius + " blocks (NOT 3000!)");
+        // Cache around start
+        Location regionStart1 = new Location(navStart.getWorld(), 
+            navStart.getBlockX() - localRadius, 0, navStart.getBlockZ() - localRadius);
+        Location regionStart2 = new Location(navStart.getWorld(), 
+            navStart.getBlockX() + localRadius, 255, navStart.getBlockZ() + localRadius);
+        pathfinder.getValidator().preCacheRegion(regionStart1, regionStart2);
         
-        // Кешируем ТОЛЬКО область между портами + небольшой буфер
-        preCacheSmartRegion(navStart, navEnd, dynamicRadius);
+        // Cache around end
+        Location regionEnd1 = new Location(navEnd.getWorld(), 
+            navEnd.getBlockX() - localRadius, 0, navEnd.getBlockZ() - localRadius);
+        Location regionEnd2 = new Location(navEnd.getWorld(), 
+            navEnd.getBlockX() + localRadius, 255, navEnd.getBlockZ() + localRadius);
+        pathfinder.getValidator().preCacheRegion(regionEnd1, regionEnd2);
         
         long preCacheTime = System.currentTimeMillis() - preCacheStart;
         
         int cachedBlocks = cache.getCachedBlockCount();
-        double coverage = cache.getCoveragePercent(navStart, navEnd);
         
         player.sendMessage("§a✓ Phase 2 complete");
-        player.sendMessage("§7  Cached: §f" + cachedBlocks + " blocks");
-        player.sendMessage("§7  Coverage: §a" + String.format("%.1f%%", coverage));
+        player.sendMessage("§7  Cached: §f" + cachedBlocks + " blocks (start/end areas)");
         player.sendMessage("§7  Time: §f" + (preCacheTime / 1000.0) + "s");
+        player.sendMessage("§7Note: A* will cache dynamically during search");
         
-        // ===== PHASE 3: Async BFS pathfinding =====
-        player.sendMessage("§7Phase 3: BFS pathfinding (async)...");
+        // ===== PHASE 3: Async A* pathfinding (UNLIMITED!) =====
+        player.sendMessage("§7Phase 3: A* pathfinding (async)...");
         
         final Location finalNavStart = navStart;
         final Location finalNavEnd = navEnd;
         
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             
-            long bfsStart = System.currentTimeMillis();
-            List<Location> rawPath = pathfinder.findPath(finalNavStart, finalNavEnd, player);
-            long bfsTime = System.currentTimeMillis() - bfsStart;
+            long astarStart = System.currentTimeMillis();
+            List<Location> rawPath = pathfinder.findPath(finalNavStart, finalNavEnd, 
+                finalNavStart.getWorld());
+            long astarTime = System.currentTimeMillis() - astarStart;
             
             if (rawPath == null || rawPath.isEmpty()) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     player.sendMessage("§c✗ No path found!");
-                    player.sendMessage("§7Possible reasons:");
-                    player.sendMessage("§7  - Land blocks the water route");
-                    player.sendMessage("§7  - Ports are on different water bodies");
-                    player.sendMessage("§7  - Try: §e/port find-nav " + fromName);
+                    player.sendMessage("§7There may be no water route between these ports.");
+                    player.sendMessage("§7Try using /port visualize to check port placement.");
                 });
                 return;
             }
             
-            plugin.getLogger().info("✓ Raw path found: " + rawPath.size() + " waypoints in " + bfsTime + "ms");
-            
             // ===== PHASE 4: Optimize path =====
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                player.sendMessage("§a✓ Phase 3 complete");
+                player.sendMessage("§7  Raw waypoints: §f" + rawPath.size());
+                player.sendMessage("§7  Time: §f" + (astarTime / 1000.0) + "s");
+                player.sendMessage("§7Phase 4: Optimizing path...");
+            });
+            
+            long optimizeStart = System.currentTimeMillis();
+            
+            // Оптимизируем путь
             List<Location> optimizedPath = optimizer.optimize(rawPath);
             
-            plugin.getLogger().info("✓ Optimized path: " + optimizedPath.size() + " waypoints");
+            long optimizeTime = System.currentTimeMillis() - optimizeStart;
             
-            // ===== PHASE 5: Build full path =====
-            List<Location> fullPath = new ArrayList<>();
-            
-            // Add dock exit segment (from port)
-            fullPath.add(portStart.clone());
-            fullPath.add(finalNavStart.clone());
-            
-            // Add main path
-            fullPath.addAll(optimizedPath);
-            
-            // Add dock entry segment (to port)
-            fullPath.add(finalNavEnd.clone());
-            fullPath.add(portEnd.clone());
-            
-            // ===== PHASE 6: Save =====
-            storage.savePath(fromName, toName, fullPath);
-            cache.saveCache();
-            
-            long totalTime = System.currentTimeMillis() - totalStartTime;
-            double reduction = rawPath.size() > 0 ? 
-                (1 - (double) optimizedPath.size() / rawPath.size()) * 100 : 0;
-            
-            // Report success
+            // ===== PHASE 5: Save route =====
             Bukkit.getScheduler().runTask(plugin, () -> {
+                player.sendMessage("§a✓ Phase 4 complete");
+                player.sendMessage("§7  Optimized: §f" + optimizedPath.size() + " waypoints");
+                player.sendMessage("§7  Time: §f" + (optimizeTime / 1000.0) + "s");
+                
+                // Save the path
+                storage.savePath(fromName, toName, optimizedPath);
+                
+                long totalTime = System.currentTimeMillis() - preCacheStart;
+                int pathDistance = (int) finalNavStart.distance(finalNavEnd);
+                
                 player.sendMessage("");
-                player.sendMessage("§a§l✓ PATH FOUND!");
-                player.sendMessage("§7  From: §f" + fromName);
-                player.sendMessage("§7  To: §f" + toName);
-                player.sendMessage("§7  Distance: §f" + distance + " blocks");
-                player.sendMessage("§7  Waypoints: §f" + fullPath.size());
-                player.sendMessage("§7  Optimization: §f" + (int)reduction + "% reduced");
-                player.sendMessage("§7  Total time: §f" + (totalTime / 1000.0) + "s");
-                player.sendMessage("§7💾 Saved to routes.yml");
+                player.sendMessage("§a✓ PATH FOUND!");
+                player.sendMessage("§7From: §f" + fromName);
+                player.sendMessage("§7To: §f" + toName);
+                player.sendMessage("§7Distance: §f" + pathDistance + " blocks");
+                player.sendMessage("§7Waypoints: §f" + optimizedPath.size());
+                player.sendMessage("§7Total time: §a" + (totalTime / 1000.0) + "s");
                 player.sendMessage("");
+                player.sendMessage("§7Use §f/port visualize " + fromName + " §7to see the route!");
             });
         });
-    }
-    
-    /**
-     * Умное кеширование - только область между портами
-     */
-    private void preCacheSmartRegion(Location start, Location end, int buffer) {
-        int minX = Math.min(start.getBlockX(), end.getBlockX()) - buffer;
-        int maxX = Math.max(start.getBlockX(), end.getBlockX()) + buffer;
-        int minZ = Math.min(start.getBlockZ(), end.getBlockZ()) - buffer;
-        int maxZ = Math.max(start.getBlockZ(), end.getBlockZ()) + buffer;
-        
-        int seaLevel = pathfinder.getSeaLevel();
-        
-        Location regionMin = new Location(start.getWorld(), minX, seaLevel, minZ);
-        Location regionMax = new Location(start.getWorld(), maxX, seaLevel, maxZ);
-        
-        int blocksToCache = (maxX - minX) * (maxZ - minZ);
-        int chunksToCache = blocksToCache / 256; // 16x16 блоков в чанке
-        
-        plugin.getLogger().info("Pre-caching region:");
-        plugin.getLogger().info("  From: " + minX + "," + minZ + " to " + maxX + "," + maxZ);
-        plugin.getLogger().info("  ~" + chunksToCache + " chunks (was 141,376 with radius 3000!)");
-        
-        pathfinder.getValidator().preCacheRegion(regionMin, regionMax);
     }
     
     /**
@@ -287,7 +268,7 @@ public class PathfindingManager {
         cache.saveCache();
     }
     
-    public WaterPathfinder getPathfinder() {
+    public WaterPathfinderAStar getPathfinder() {
         return pathfinder;
     }
     

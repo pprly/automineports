@@ -1,15 +1,15 @@
 package com.example.boatroutes.commands;
 
 import com.example.boatroutes.BoatRoutesPlugin;
-import com.example.boatroutes.dock.Dock;
-import com.example.boatroutes.pathfinding.PathValidator;
 import com.example.boatroutes.port.Port;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.List;
 import java.util.Set;
 
 public class PortCommand implements CommandExecutor {
@@ -44,6 +44,7 @@ public class PortCommand implements CommandExecutor {
             case "routes" -> handleRoutes(player, args);
             case "cache" -> handleCache(player, args);
             case "find-nav" -> handleFindNav(player, args);
+            case "visualize" -> handleVisualize(player, args);
             default -> sendHelp(player);
         }
 
@@ -58,6 +59,7 @@ public class PortCommand implements CommandExecutor {
         player.sendMessage("§e/port info <n> §7- Port information");
         player.sendMessage("§e/port connect <A> <B> §7- Calculate path");
         player.sendMessage("§e/port reconnect <A> <B> §7- Recalculate path");
+        player.sendMessage("§e/port visualize <n> §7- Visualize path");
         player.sendMessage("§e/port routes list §7- List routes");
         player.sendMessage("§e/port cache info §7- Cache statistics");
         player.sendMessage("§e/port find-nav <n> §7- Find navigable water");
@@ -174,8 +176,8 @@ public class PortCommand implements CommandExecutor {
         }
 
         player.sendMessage("");
-        player.sendMessage("§6⚓ v4.0: Calculating path with dynamic caching...");
-        player.sendMessage("§7This may take 2-10 seconds");
+        player.sendMessage("§6⚓ BoatRoutes Pathfinding...");
+        player.sendMessage("§7This may take a few seconds");
 
         plugin.getPathfindingManager().findPathBetweenPortsAsync(port1, port2, player);
     }
@@ -246,10 +248,6 @@ public class PortCommand implements CommandExecutor {
         }
     }
 
-    // ============================================
-    // NEW v4.0 CACHE COMMANDS
-    // ============================================
-
     private void handleCache(Player player, String[] args) {
         if (args.length < 2) {
             player.sendMessage("§cUsage:");
@@ -269,8 +267,6 @@ public class PortCommand implements CommandExecutor {
 
     private void handleCacheInfo(Player player) {
         var cache = plugin.getPathfindingManager().getCache();
-        
-        // ИСПРАВЛЕНО: используем getCacheStats() вместо getStats()
         var stats = cache.getCacheStats();
 
         player.sendMessage("§6=== Water Cache Statistics ===");
@@ -362,7 +358,6 @@ public class PortCommand implements CommandExecutor {
         player.sendMessage("§6⚓ Searching for navigable water from §e" + portName + "§6...");
         player.sendMessage("§7This may take 5-10 seconds");
 
-        // Async search
         org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             var navFinder = plugin.getPathfindingManager().getPathfinder().getNavFinder();
             Location navWater = navFinder.findNavigableWater(convergence, 50);
@@ -397,6 +392,130 @@ public class PortCommand implements CommandExecutor {
                 }
             });
         });
+    }
+
+    private void handleVisualize(Player player, String[] args) {
+        if (args.length < 2) {
+            player.sendMessage("§cUsage: §e/port visualize <portname>");
+            return;
+        }
+
+        String portName = args[1];
+        Port port = plugin.getPortManager().getPort(portName);
+
+        if (port == null) {
+            player.sendMessage("§cPort '" + portName + "' does not exist!");
+            return;
+        }
+
+        // Ищем любой путь ОТ этого порта
+        String pathKey = findAnyPathFrom(portName);
+
+        if (pathKey == null) {
+            player.sendMessage("§cNo paths found from port '" + portName + "'!");
+            player.sendMessage("§7Use §e/port connect " + portName + " <other_port> §7first");
+            return;
+        }
+
+        // Загружаем путь
+        String[] parts = pathKey.split("_to_");
+        String fromPort = parts[0];
+        String toPort = parts[1];
+
+        List<Location> path = plugin.getPathfindingManager().getPath(fromPort, toPort);
+
+        if (path == null || path.isEmpty()) {
+            player.sendMessage("§cPath data is corrupted!");
+            return;
+        }
+
+        player.sendMessage("§6⚓ Visualizing path: §e" + fromPort + " §6→ §e" + toPort);
+        player.sendMessage("§7Waypoints: §f" + path.size());
+        player.sendMessage("§7Particles will show for 30 seconds...");
+
+        // Телепортируем игрока к началу
+        Location startLoc = path.get(0).clone();
+        startLoc.setY(startLoc.getY() + 10);
+        player.teleport(startLoc);
+
+        // Показываем частицы постоянно в течение 30 секунд
+        final int DURATION_SECONDS = 30;
+        final int TICKS_PER_SPAWN = 20; // Каждую секунду
+
+        org.bukkit.scheduler.BukkitTask task = org.bukkit.Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            // Спавним частицы по всему пути
+            for (int i = 0; i < path.size(); i++) {
+                Location loc = path.get(i);
+
+                // Основные зеленые частицы
+                loc.getWorld().spawnParticle(
+                        Particle.HAPPY_VILLAGER,
+                        loc.clone().add(0.5, 0.5, 0.5),
+                        3,
+                        0.2, 0.2, 0.2,
+                        0
+                );
+
+                // Маркеры каждые 10 блоков
+                if (i % 10 == 0) {
+                    loc.getWorld().spawnParticle(
+                            Particle.SPLASH,
+                            loc.clone().add(0.5, 1, 0.5),
+                            10,
+                            0.3, 0.5, 0.3,
+                            0.1
+                    );
+                }
+
+                // Стартовая точка - яркая
+                if (i == 0) {
+                    loc.getWorld().spawnParticle(
+                            Particle.END_ROD,
+                            loc.clone().add(0.5, 2, 0.5),
+                            20,
+                            0.5, 1, 0.5,
+                            0.05
+                    );
+                }
+
+                // Конечная точка - яркая
+                if (i == path.size() - 1) {
+                    loc.getWorld().spawnParticle(
+                            Particle.TOTEM_OF_UNDYING,
+                            loc.clone().add(0.5, 2, 0.5),
+                            20,
+                            0.5, 1, 0.5,
+                            0.05
+                    );
+                }
+            }
+        }, 0L, TICKS_PER_SPAWN);
+
+        // Останавливаем через 30 секунд
+        org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            task.cancel();
+            player.sendMessage("§7Path visualization ended");
+        }, DURATION_SECONDS * 20L);
+
+        player.sendMessage("§a✓ Visualizing! §7(Press F to fly and explore)");
+        player.sendMessage("§7Duration: §f30 seconds");
+    }
+
+    private String findAnyPathFrom(String portName) {
+        Set<String> routes = plugin.getPathfindingManager().getStorage().getCachedRouteIds();
+
+        for (String routeId : routes) {
+            if (routeId.startsWith(portName + "_to_")) {
+                return routeId;
+            }
+            // Также проверяем обратный путь
+            if (routeId.endsWith("_to_" + portName)) {
+                String[] parts = routeId.split("_to_");
+                return parts[1] + "_to_" + parts[0];
+            }
+        }
+
+        return null;
     }
 
     // Helper methods

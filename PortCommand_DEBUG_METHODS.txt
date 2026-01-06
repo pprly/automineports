@@ -1,0 +1,130 @@
+// ============================================
+// ДОБАВЬ ЭТИ КОМАНДЫ В PortCommand.java
+// ============================================
+
+// В switch() добавь:
+case "visualize", "show" -> handleVisualize(player, args);
+case "show-points" -> handleShowPoints(player, args);
+case "show-path" -> handleShowPath(player, args);
+case "debug-path" -> handleDebugPath(player, args);
+
+// ============================================
+// МЕТОДЫ ДЛЯ ВИЗУАЛИЗАЦИИ
+// ============================================
+
+/**
+ * Visualize a single port
+ * Usage: /port visualize <portname>
+ */
+private void handleVisualize(Player player, String[] args) {
+    if (args.length < 2) {
+        player.sendMessage("§cUsage: §e/port visualize <portname>");
+        return;
+    }
+    
+    String portName = args[1];
+    Port port = plugin.getPortManager().getPort(portName);
+    
+    if (port == null) {
+        player.sendMessage("§cPort '" + portName + "' does not exist!");
+        return;
+    }
+    
+    DebugVisualizer visualizer = new DebugVisualizer(plugin);
+    visualizer.visualizePort(port, player);
+}
+
+/**
+ * Show convergence and split points between two ports
+ * Usage: /port show-points <port1> <port2>
+ */
+private void handleShowPoints(Player player, String[] args) {
+    if (args.length < 3) {
+        player.sendMessage("§cUsage: §e/port show-points <port1> <port2>");
+        return;
+    }
+    
+    String port1Name = args[1];
+    String port2Name = args[2];
+    
+    Port port1 = plugin.getPortManager().getPort(port1Name);
+    Port port2 = plugin.getPortManager().getPort(port2Name);
+    
+    if (port1 == null || port2 == null) {
+        player.sendMessage("§cOne or both ports do not exist!");
+        return;
+    }
+    
+    DebugVisualizer visualizer = new DebugVisualizer(plugin);
+    visualizer.visualizePoints(port1, port2, player);
+}
+
+/**
+ * Show calculated path between two ports
+ * Usage: /port show-path <port1> <port2>
+ */
+private void handleShowPath(Player player, String[] args) {
+    if (args.length < 3) {
+        player.sendMessage("§cUsage: §e/port show-path <port1> <port2>");
+        return;
+    }
+    
+    String port1Name = args[1];
+    String port2Name = args[2];
+    
+    List<Location> path = plugin.getPathfindingManager().getPath(port1Name, port2Name);
+    
+    if (path == null || path.isEmpty()) {
+        player.sendMessage("§cNo path found between these ports!");
+        player.sendMessage("§7Use §e/port connect " + port1Name + " " + port2Name + " §7first");
+        return;
+    }
+    
+    DebugVisualizer visualizer = new DebugVisualizer(plugin);
+    visualizer.visualizePath(path, player, port1Name + " → " + port2Name);
+}
+
+/**
+ * Debug pathfinding in real-time
+ * Usage: /port debug-path <port1> <port2>
+ */
+private void handleDebugPath(Player player, String[] args) {
+    if (args.length < 3) {
+        player.sendMessage("§cUsage: §e/port debug-path <port1> <port2>");
+        return;
+    }
+    
+    String port1Name = args[1];
+    String port2Name = args[2];
+    
+    Port port1 = plugin.getPortManager().getPort(port1Name);
+    Port port2 = plugin.getPortManager().getPort(port2Name);
+    
+    if (port1 == null || port2 == null) {
+        player.sendMessage("§cOne or both ports do not exist!");
+        return;
+    }
+    
+    Location start = port1.getConvergencePoint();
+    Location end = port2.getSplitPoint();
+    
+    if (start == null || end == null) {
+        player.sendMessage("§cPorts not fully set up!");
+        return;
+    }
+    
+    DebugVisualizer visualizer = new DebugVisualizer(plugin);
+    visualizer.visualizePathfinding(start, end, player);
+    
+    player.sendMessage("§7Starting pathfinding visualization...");
+    player.sendMessage("§7Check console for detailed logs");
+}
+
+// ============================================
+// ОБНОВИ sendHelp() ДОБАВИВ:
+// ============================================
+
+player.sendMessage("§e/port visualize <n> §7- Show port structure (30 sec)");
+player.sendMessage("§e/port show-points <p1> <p2> §7- Show convergence/split (30 sec)");
+player.sendMessage("§e/port show-path <p1> <p2> §7- Show path route (30 sec)");
+player.sendMessage("§e/port debug-path <p1> <p2> §7- Debug pathfinding");

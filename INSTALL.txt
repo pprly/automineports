@@ -1,0 +1,200 @@
+╔══════════════════════════════════════════════════════════════╗
+║     BoatRoutes - Debug Visualization System                ║
+║     Система для визуализации портов, причалов и путей      ║
+╚══════════════════════════════════════════════════════════════╝
+
+🎨 ЗАЧЕМ ЭТО НУЖНО:
+
+При разработке pathfinding нужно видеть:
+✓ Где находятся порты
+✓ Где convergence/split points
+✓ Где причалы и их exit/entry points
+✓ Как строится путь между портами
+✓ Почему pathfinding не находит путь
+
+Без визуализации = работа вслепую!
+
+═══════════════════════════════════════════════════════════════
+
+📦 УСТАНОВКА:
+
+1. Скопируй DebugVisualizer.java:
+   → src/main/java/com/example/boatroutes/debug/DebugVisualizer.java
+
+2. Добавь методы в PortCommand.java:
+   → Скопируй из PortCommand_DEBUG_METHODS.txt
+   → Добавь в switch case
+   → Добавь методы в конец класса
+
+3. Rebuild:
+   ./gradlew clean build
+
+4. Готово!
+
+═══════════════════════════════════════════════════════════════
+
+🎯 КОМАНДЫ:
+
+1. /port visualize <portname>
+   Показывает ВЕСЬ порт 30 секунд:
+   
+   🔥 RED (Flame) = NPC Location
+   ✓ GREEN (Happy Villager) = Convergence Point
+   💧 BLUE (Water Splash) = Split Point
+   ⭐ YELLOW (End Rod) = Docks
+   🌋 ORANGE (Lava) = Exit Points
+   💦 LIGHT BLUE (Dripping Water) = Entry Points
+   
+   Телепортирует тебя на +20 блоков выше для обзора!
+
+---
+
+2. /port show-points <port1> <port2>
+   Показывает convergence и split между двумя портами:
+   
+   ✓ GREEN = Convergence (откуда)
+   💧 BLUE = Split (куда)
+   ⚪ WHITE LINE = Прямая линия между ними
+   
+   Телепортирует к середине между точками!
+   Показывает дистанцию!
+
+---
+
+3. /port show-path <port1> <port2>
+   Показывает РАССЧИТАННЫЙ путь (если есть):
+   
+   💜 PURPLE (Witch) = Waypoints
+   🐬 DOLPHIN (Line) = Линии между waypoints
+   ⭐ GOLD (Flash) = Текущий waypoint (двигается)
+   ✓ GREEN = Start
+   ❤️ RED = End
+   
+   Показывает сколько waypoints!
+   Highlight двигается по пути!
+
+---
+
+4. /port debug-path <port1> <port2>
+   Debug режим для pathfinding:
+   
+   Показывает start/end точки
+   Логирует процесс в консоль
+   Для отладки проблем с pathfinding
+
+═══════════════════════════════════════════════════════════════
+
+💡 ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ:
+
+1. Проверить что порт правильно создан:
+   /port visualize spawn
+   
+   Смотришь:
+   ✓ NPC на месте?
+   ✓ Convergence/Split точки в воде?
+   ✓ Docks правильно расставлены?
+   ✓ Exit/Entry points работают?
+
+2. Понять почему не находит путь между портами:
+   /port show-points spawn north
+   
+   Смотришь:
+   ✓ Дистанция слишком большая?
+   ✓ Точки в воде?
+   ✓ Есть ли земля между ними?
+
+3. Проверить рассчитанный путь:
+   /port show-path spawn north
+   
+   Смотришь:
+   ✓ Путь идёт по воде?
+   ✓ Не проходит через землю?
+   ✓ Waypoints адекватные?
+   ✓ Путь оптимизирован?
+
+4. Debug pathfinding проблем:
+   /port debug-path spawn north
+   
+   Смотришь логи в консоли:
+   ✓ Сколько итераций?
+   ✓ Где остановился?
+   ✓ Какие ошибки?
+
+═══════════════════════════════════════════════════════════════
+
+🎨 ЦВЕТОВАЯ СХЕМА:
+
+🔥 RED = Начальные точки (NPC, End goal)
+✓ GREEN = Точки отправления (Convergence, Start)
+💧 BLUE = Точки прибытия (Split, End)
+⭐ YELLOW = Инфраструктура (Docks)
+🌋 ORANGE = Выходы (Exit points)
+💦 LIGHT BLUE = Входы (Entry points)
+💜 PURPLE = Путь (Waypoints)
+🐬 DOLPHIN = Соединения
+⚪ WHITE = Линии
+
+═══════════════════════════════════════════════════════════════
+
+⏱️ ДЛИТЕЛЬНОСТЬ:
+
+Все визуализации = 30 секунд (600 ticks)
+Звуковые эффекты каждые 1-2 секунды
+Auto-teleport для лучшего обзора
+
+═══════════════════════════════════════════════════════════════
+
+🐛 TROUBLESHOOTING:
+
+"Ничего не вижу"
+→ Проверь что телепортировался
+→ Посмотри вверх/вниз
+→ Возможно частицы заспамились
+
+"Слишком много частиц"
+→ Это нормально! 30 секунд и закончится
+→ Можно уменьшить DURATION_TICKS в коде
+
+"Не телепортирует"
+→ Проверь координаты портов
+→ Возможно порт не setup
+
+═══════════════════════════════════════════════════════════════
+
+🎓 ЛУЧШИЕ ПРАКТИКИ:
+
+1. ВСЕГДА визуализируй порт после создания:
+   /port create spawn
+   /port visualize spawn
+   → Проверяешь что всё правильно!
+
+2. Перед connect - проверь точки:
+   /port show-points spawn north
+   → Понимаешь дистанцию и положение!
+
+3. После connect - проверь путь:
+   /port show-path spawn north
+   → Видишь результат pathfinding!
+
+4. Если не работает - debug:
+   /port debug-path spawn north
+   → Читаешь логи, находишь проблему!
+
+═══════════════════════════════════════════════════════════════
+
+🚀 WORKFLOW:
+
+CREATE → VISUALIZE → CONNECT → SHOW-PATH → TEST
+
+1. /port create spawn
+2. (place docks)
+3. /port visualize spawn ← ПРОВЕРКА!
+4. /port create north
+5. (place docks)
+6. /port visualize north ← ПРОВЕРКА!
+7. /port show-points spawn north ← ДИСТАНЦИЯ!
+8. /port connect spawn north
+9. /port show-path spawn north ← РЕЗУЛЬТАТ!
+10. (test boat travel)
+
+═══════════════════════════════════════════════════════════════
