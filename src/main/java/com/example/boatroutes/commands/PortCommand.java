@@ -422,7 +422,8 @@ public class PortCommand implements CommandExecutor {
         String fromPort = parts[0];
         String toPort = parts[1];
 
-        List<Location> path = plugin.getPathfindingManager().getPath(fromPort, toPort);
+        // ИЗМЕНЕНО: Получаем RAW path (до оптимизации) для визуализации!
+        List<Location> path = plugin.getPathfindingManager().getRawPath(fromPort, toPort);
 
         if (path == null || path.isEmpty()) {
             player.sendMessage("§cPath data is corrupted!");
