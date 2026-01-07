@@ -15,6 +15,7 @@ import com.example.boatroutes.pathfinding.PathfindingManager;
 import com.example.boatroutes.port.PortManager;
 import com.example.boatroutes.route.RouteManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import com.example.boatroutes.commands.ExportCommand;
 
 public class BoatRoutesPlugin extends JavaPlugin {
     
@@ -49,6 +50,7 @@ public class BoatRoutesPlugin extends JavaPlugin {
         getLogger().info("Registering commands...");
         getCommand("port").setExecutor(new PortCommand(this));
         getCommand("port").setTabCompleter(new PortTabCompleter(this));
+        getCommand("export-cache").setExecutor(new ExportCommand(this));
         
         getLogger().info("Registering listeners...");
         getServer().getPluginManager().registerEvents(new VehicleListener(this), this);

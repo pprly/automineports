@@ -11,6 +11,10 @@ commands:
     usage: /port <create|delete|list|info|connect|visualize> [args]
     aliases: [ports]
 
+  export-cache:
+    description: Export world cache for visualizer
+    usage: /export-cache <radius>
+
 permissions:
   boatroutes.admin:
     description: Admin commands for ports
