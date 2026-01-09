@@ -7,21 +7,17 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * WaterWorldCache v4.0 - Кеш информации о воде
+ * WaterWorldCache v5.0 - Кеш с COST SYSTEM (Thread-Safe)
  * 
- * Сохраняет информацию о том, какие блоки являются водой.
- * Позволяет искать путь через непрогруженные чанки!
- * 
- * Структура кеша: Map<Long, Boolean>
- * где Long = (x << 32) | (z & 0xFFFFFFFFL)
+ * ИСПРАВЛЕНО: ConcurrentHashMap для thread-safety
  * 
  * @author BoatRoutes Team
- * @version 4.0
+ * @version 5.0-FIXED
  */
 public class WaterWorldCache {
     
@@ -29,8 +25,8 @@ public class WaterWorldCache {
     private final File cacheFile;
     private FileConfiguration cacheConfig;
     
-    // Основной кеш: packed coords -> isWater
-    private final Map<Long, Boolean> waterCache = new HashMap<>();
+    // Thread-safe кеш!
+    private final Map<Long, BlockData> cache = new ConcurrentHashMap<>();
     
     // Статистика
     private int cacheHits = 0;
@@ -51,23 +47,51 @@ public class WaterWorldCache {
     public Boolean isWater(int x, int z) {
         long key = packCoords(x, z);
         
-        Boolean result = waterCache.get(key);
+        BlockData data = cache.get(key);
         
-        if (result != null) {
+        if (data != null) {
             cacheHits++;
+            return data.isWater;
         } else {
             cacheMisses++;
+            return null;
         }
-        
-        return result;
     }
     
     /**
-     * Устанавливает значение в кеш
+     * Получить cost блока (для pathfinding)
+     * 
+     * @return cost (1-100) если есть в кеше, null если нет
+     */
+    public Integer getCost(int x, int z) {
+        long key = packCoords(x, z);
+        
+        BlockData data = cache.get(key);
+        
+        if (data != null) {
+            cacheHits++;
+            return data.cost;
+        } else {
+            cacheMisses++;
+            return null;
+        }
+    }
+    
+    /**
+     * Устанавливает значение в кеш (с cost)
+     */
+    public void setWater(int x, int z, boolean isWater, int cost) {
+        long key = packCoords(x, z);
+        cache.put(key, new BlockData(isWater, cost));
+    }
+    
+    /**
+     * Устанавливает значение в кеш (без cost - backward compatibility)
      */
     public void setWater(int x, int z, boolean isWater) {
-        long key = packCoords(x, z);
-        waterCache.put(key, isWater);
+        // Default cost: water = 1, land = 100
+        int cost = isWater ? 1 : 100;
+        setWater(x, z, isWater, cost);
     }
     
     /**
@@ -102,7 +126,7 @@ public class WaterWorldCache {
         for (int x = minX; x <= maxX; x += 10) {
             for (int z = minZ; z <= maxZ; z += 10) {
                 totalBlocks++;
-                if (isWater(x, z) != null) {
+                if (cache.containsKey(packCoords(x, z))) {
                     cachedBlocks++;
                 }
             }
@@ -114,77 +138,25 @@ public class WaterWorldCache {
     }
     
     /**
-     * Возвращает количество закешированных блоков
+     * Статистика кеша
      */
-    public int getCachedBlockCount() {
-        return waterCache.size();
+    public void printStats() {
+        int totalRequests = cacheHits + cacheMisses;
+        double hitRate = totalRequests > 0 ? (double) cacheHits / totalRequests * 100.0 : 0;
+        
+        plugin.getLogger().info("=== CACHE STATISTICS ===");
+        plugin.getLogger().info("Total blocks cached: " + cache.size());
+        plugin.getLogger().info("Cache hits: " + cacheHits);
+        plugin.getLogger().info("Cache misses: " + cacheMisses);
+        plugin.getLogger().info("Hit rate: " + String.format("%.1f%%", hitRate));
+        plugin.getLogger().info("Memory usage: ~" + (getMemoryUsage() / 1024) + " KB");
     }
     
     /**
-     * Возвращает статистику кеша (для совместимости с Map)
-     */
-    public Map<String, Object> getStats() {
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("cachedBlocks", waterCache.size());
-        stats.put("cacheHits", cacheHits);
-        stats.put("cacheMisses", cacheMisses);
-        
-        double hitRate = (cacheHits + cacheMisses) > 0 
-            ? (cacheHits * 100.0) / (cacheHits + cacheMisses) 
-            : 0;
-        stats.put("hitRate", hitRate);
-        
-        // Оценка размера в памяти (примерно)
-        long memoryBytes = waterCache.size() * 17; // 8 bytes key + 1 byte value + overhead
-        stats.put("memoryKB", memoryBytes / 1024);
-        
-        return stats;
-    }
-    
-    /**
-     * Возвращает статистику кеша как объект CacheStats
-     * (для совместимости с PortCommand)
-     */
-    public CacheStats getCacheStats() {
-        int waterBlocks = 0;
-        for (Boolean isWater : waterCache.values()) {
-            if (isWater != null && isWater) {
-                waterBlocks++;
-            }
-        }
-        
-        // Оценка размера файла
-        long fileSizeBytes = 0;
-        if (cacheFile.exists()) {
-            fileSizeBytes = cacheFile.length();
-        }
-        
-        // Примерное количество чанков (16x16 блоков в чанке)
-        int cachedChunks = waterCache.size() / 256;
-        
-        return new CacheStats(cachedChunks, waterBlocks, fileSizeBytes);
-    }
-    
-    /**
-     * Класс для статистики кеша (для совместимости с PortCommand)
-     */
-    public static class CacheStats {
-        public final int cachedChunks;
-        public final int waterBlocks;
-        public final long fileSizeBytes;
-        
-        public CacheStats(int cachedChunks, int waterBlocks, long fileSizeBytes) {
-            this.cachedChunks = cachedChunks;
-            this.waterBlocks = waterBlocks;
-            this.fileSizeBytes = fileSizeBytes;
-        }
-    }
-    
-    /**
-     * Очищает кеш
+     * Очистить кеш
      */
     public void clearCache() {
-        waterCache.clear();
+        cache.clear();
         cacheHits = 0;
         cacheMisses = 0;
         
@@ -204,39 +176,44 @@ public class WaterWorldCache {
             cacheConfig = new YamlConfiguration();
             
             // Сохраняем метаданные
-            cacheConfig.set("meta.version", "4.0");
-            cacheConfig.set("meta.blocks", waterCache.size());
+            cacheConfig.set("meta.version", "5.0");
+            cacheConfig.set("meta.blocks", cache.size());
             cacheConfig.set("meta.saved", System.currentTimeMillis());
             
-            // Сохраняем данные (группируем по регионам для эффективности)
-            // Сохраняем только водные блоки (суша = отсутствие в кеше)
-            int waterCount = 0;
-            StringBuilder waterData = new StringBuilder();
+            // Сохраняем данные (группируем для эффективности)
+            // Формат: x,z,isWater,cost;x,z,isWater,cost;...
+            int blockCount = 0;
+            StringBuilder data = new StringBuilder();
             
-            for (Map.Entry<Long, Boolean> entry : waterCache.entrySet()) {
-                if (entry.getValue()) { // Только вода
-                    int[] coords = unpackCoords(entry.getKey());
-                    waterData.append(coords[0]).append(",").append(coords[1]).append(";");
-                    waterCount++;
-                    
-                    // Разбиваем на чанки по 10000 записей
-                    if (waterCount % 10000 == 0) {
-                        cacheConfig.set("water.chunk" + (waterCount / 10000), waterData.toString());
-                        waterData = new StringBuilder();
-                    }
+            for (Map.Entry<Long, BlockData> entry : cache.entrySet()) {
+                int[] coords = unpackCoords(entry.getKey());
+                BlockData blockData = entry.getValue();
+                
+                // Формат: x,z,isWater(0/1),cost
+                data.append(coords[0]).append(",")
+                    .append(coords[1]).append(",")
+                    .append(blockData.isWater ? "1" : "0").append(",")
+                    .append(blockData.cost).append(";");
+                
+                blockCount++;
+                
+                // Разбиваем на чанки по 5000 записей
+                if (blockCount % 5000 == 0) {
+                    cacheConfig.set("blocks.chunk" + (blockCount / 5000), data.toString());
+                    data = new StringBuilder();
                 }
             }
             
             // Сохраняем остаток
-            if (waterData.length() > 0) {
-                cacheConfig.set("water.chunk" + ((waterCount / 10000) + 1), waterData.toString());
+            if (data.length() > 0) {
+                cacheConfig.set("blocks.chunk" + ((blockCount / 5000) + 1), data.toString());
             }
             
-            cacheConfig.set("meta.waterBlocks", waterCount);
+            cacheConfig.set("meta.totalBlocks", blockCount);
             
             cacheConfig.save(cacheFile);
             
-            plugin.getLogger().info("Water cache saved: " + waterCount + " water blocks");
+            plugin.getLogger().info("Water cache saved: " + blockCount + " blocks (v5.0 with costs)");
             
         } catch (IOException e) {
             plugin.getLogger().warning("Could not save water cache: " + e.getMessage());
@@ -255,37 +232,20 @@ public class WaterWorldCache {
         try {
             cacheConfig = YamlConfiguration.loadConfiguration(cacheFile);
             
-            String version = cacheConfig.getString("meta.version", "1.0");
-            int expectedBlocks = cacheConfig.getInt("meta.waterBlocks", 0);
+            String version = cacheConfig.getString("meta.version", "4.0");
+            int expectedBlocks = cacheConfig.getInt("meta.totalBlocks", 
+                                 cacheConfig.getInt("meta.waterBlocks", 0));
             
-            plugin.getLogger().info("Loading water cache v" + version + " (" + expectedBlocks + " blocks expected)");
+            plugin.getLogger().info("Loading water cache v" + version + 
+                " (" + expectedBlocks + " blocks expected)");
             
-            // Загружаем все чанки данных
-            if (cacheConfig.contains("water")) {
-                Set<String> chunks = cacheConfig.getConfigurationSection("water").getKeys(false);
-                
-                int loadedCount = 0;
-                for (String chunkKey : chunks) {
-                    String data = cacheConfig.getString("water." + chunkKey, "");
-                    String[] entries = data.split(";");
-                    
-                    for (String entry : entries) {
-                        if (entry.isEmpty()) continue;
-                        
-                        String[] coords = entry.split(",");
-                        if (coords.length < 2) continue;
-                        
-                        try {
-                            int x = Integer.parseInt(coords[0]);
-                            int z = Integer.parseInt(coords[1]);
-                            setWater(x, z, true);
-                            loadedCount++;
-                        } catch (NumberFormatException ignored) {
-                        }
-                    }
-                }
-                
-                plugin.getLogger().info("Water cache loaded: " + loadedCount + " water blocks");
+            // Загружаем v5.0 формат (с cost)
+            if (cacheConfig.contains("blocks")) {
+                loadV5Format();
+            } 
+            // Backward compatibility с v4.0 (без cost)
+            else if (cacheConfig.contains("water")) {
+                loadV4Format();
             }
             
         } catch (Exception e) {
@@ -294,10 +254,139 @@ public class WaterWorldCache {
     }
     
     /**
+     * Загрузка v5.0 формата (с cost)
+     */
+    private void loadV5Format() {
+        Set<String> chunks = cacheConfig.getConfigurationSection("blocks").getKeys(false);
+        
+        int loadedCount = 0;
+        for (String chunkKey : chunks) {
+            String data = cacheConfig.getString("blocks." + chunkKey, "");
+            String[] entries = data.split(";");
+            
+            for (String entry : entries) {
+                if (entry.isEmpty()) continue;
+                
+                String[] parts = entry.split(",");
+                if (parts.length < 4) continue;
+                
+                try {
+                    int x = Integer.parseInt(parts[0]);
+                    int z = Integer.parseInt(parts[1]);
+                    boolean isWater = parts[2].equals("1");
+                    int cost = Integer.parseInt(parts[3]);
+                    
+                    setWater(x, z, isWater, cost);
+                    loadedCount++;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        
+        plugin.getLogger().info("Water cache loaded: " + loadedCount + " blocks (v5.0 with costs)");
+    }
+    
+    /**
+     * Загрузка v4.0 формата (без cost - backward compatibility)
+     */
+    private void loadV4Format() {
+        plugin.getLogger().info("Loading old format cache (v4.0, no costs)...");
+        
+        Set<String> chunks = cacheConfig.getConfigurationSection("water").getKeys(false);
+        int loadedCount = 0;
+        
+        for (String chunkKey : chunks) {
+            String data = cacheConfig.getString("water." + chunkKey, "");
+            String[] entries = data.split(";");
+            
+            for (String entry : entries) {
+                if (entry.isEmpty()) continue;
+                
+                String[] coords = entry.split(",");
+                if (coords.length < 2) continue;
+                
+                try {
+                    int x = Integer.parseInt(coords[0]);
+                    int z = Integer.parseInt(coords[1]);
+                    setWater(x, z, true); // Default cost = 1
+                    loadedCount++;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        
+        plugin.getLogger().info("Loaded " + loadedCount + " blocks from v4.0 format");
+        plugin.getLogger().info("Costs will be calculated as chunks are loaded by players");
+    }
+    
+    /**
      * Возвращает примерный размер кеша в байтах
      */
     public long getMemoryUsage() {
-        // Примерная оценка: 8 bytes ключ + 1 byte значение + overhead HashMap
-        return waterCache.size() * 20L;
+        // Примерная оценка: 8 bytes ключ + 5 bytes BlockData + overhead
+        return cache.size() * 25L;
+    }
+    
+    /**
+     * Получить размер кеша (количество блоков)
+     */
+    public int size() {
+        return cache.size();
+    }
+    
+    /**
+     * Получить количество закешированных блоков
+     */
+    public int getCachedBlockCount() {
+        return cache.size();
+    }
+    
+    /**
+     * Возвращает статистику кеша как объект (для совместимости)
+     */
+    public CacheStats getCacheStats() {
+        int waterBlocks = 0;
+        for (BlockData data : cache.values()) {
+            if (data.isWater) {
+                waterBlocks++;
+            }
+        }
+        
+        long fileSizeBytes = 0;
+        if (cacheFile.exists()) {
+            fileSizeBytes = cacheFile.length();
+        }
+        
+        int cachedChunks = cache.size() / 256;
+        
+        return new CacheStats(cachedChunks, waterBlocks, fileSizeBytes);
+    }
+    
+    /**
+     * Класс для статистики кеша
+     */
+    public static class CacheStats {
+        public final int cachedChunks;
+        public final int waterBlocks;
+        public final long fileSizeBytes;
+        
+        public CacheStats(int cachedChunks, int waterBlocks, long fileSizeBytes) {
+            this.cachedChunks = cachedChunks;
+            this.waterBlocks = waterBlocks;
+            this.fileSizeBytes = fileSizeBytes;
+        }
+    }
+    
+    /**
+     * Вспомогательный класс для хранения данных блока
+     */
+    private static class BlockData {
+        final boolean isWater;
+        final int cost;
+        
+        BlockData(boolean isWater, int cost) {
+            this.isWater = isWater;
+            this.cost = cost;
+        }
     }
 }

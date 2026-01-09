@@ -4,23 +4,29 @@ import com.example.boatroutes.BoatRoutesPlugin;
 import com.example.boatroutes.cache.WaterWorldCache;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.entity.Player;
 
 import java.util.*;
 
 /**
- * BIDIRECTIONAL A* PATHFINDER - ИСПРАВЛЕННАЯ ВЕРСИЯ
- * Совместима с существующими классами проекта
+ * BIDIRECTIONAL A* v6.0 - С COST-BASED PATHFINDING!
  * 
- * КЛЮЧЕВЫЕ ОСОБЕННОСТИ:
- * 1. Работает ТОЛЬКО с кешем (не загружает чанки)
- * 2. Bidirectional: ищет с обеих сторон одновременно
- * 3. A* эвристика: приоритет ближайшим к цели
- * 4. Автоматически обходит острова/материки
- * 5. Для огромных расстояний (2000-5000 blocks)
+ * НОВОЕ В v6.0:
+ * - Cost-based pathfinding: учитывает стоимость блоков
+ * - Предпочитает глубокую воду (cost=1)
+ * - Избегает берегов (cost=5)
+ * - НО всё равно идёт через узкий пролив если это короче!
+ * 
+ * ПРИМЕР:
+ * Узкий пролив (100 блоков, cost=5): 100 * 5 = 500
+ * Обход (5000 блоков, cost=1): 5000 * 1 = 5000
+ * → Выбрать ПРОЛИВ! ✅
+ * 
+ * A* сам находит оптимальный баланс между:
+ * - Коротким путём
+ * - Безопасным путём (подальше от берега)
  * 
  * @author BoatRoutes Team
- * @version 5.0-FIXED
+ * @version 6.0-COST
  */
 public class WaterPathfinderAStar {
     
@@ -29,7 +35,6 @@ public class WaterPathfinderAStar {
     private final PathValidator validator;
     private final NavigableWaterFinder navFinder;
     private final int seaLevel = 62;
-    private final int stepSize = 1; // Шаг в 1 блок для точности (было 2)
     
     // World для динамической проверки блоков
     private org.bukkit.World world;
@@ -54,13 +59,11 @@ public class WaterPathfinderAStar {
     }
     
     /**
-     * Основной метод поиска пути - Bidirectional A*
-     * БЕЗ ОГРАНИЧЕНИЙ! Будет искать путь любой длины!
+     * Основной метод поиска пути - Bidirectional A* + COST SYSTEM
      */
     public List<Location> findPath(Location start, Location end, World world) {
         long startTime = System.currentTimeMillis();
         
-        // Сохраняем world для динамических проверок
         this.world = world;
         
         int startX = start.getBlockX();
@@ -70,18 +73,18 @@ public class WaterPathfinderAStar {
         
         double totalDistance = calculateDistance(startX, startZ, endX, endZ);
         
-        plugin.getLogger().info("=== A* PATHFINDING ===");
+        plugin.getLogger().info("=== A* PATHFINDING v6.0 (COST SYSTEM) ===");
         plugin.getLogger().info("From: " + startX + "," + seaLevel + "," + startZ);
         plugin.getLogger().info("To: " + endX + "," + seaLevel + "," + endZ);
         plugin.getLogger().info("Distance: " + String.format("%.1f", totalDistance) + " blocks");
-        plugin.getLogger().info("Algorithm: Bidirectional A* (UNLIMITED!)");
-        plugin.getLogger().info("Note: Will search dynamically without radius limits");
+        plugin.getLogger().info("Algorithm: Bidirectional A* + Cost-based");
+        plugin.getLogger().info("Cost system: prefers deep water (1), avoids shore (5)");
         
         // Priority queues для обеих волн
         PriorityQueue<AStarNode> openStart = new PriorityQueue<>();
         PriorityQueue<AStarNode> openEnd = new PriorityQueue<>();
         
-        // Visited sets с hash координат
+        // Visited sets
         Set<Long> visitedStart = new HashSet<>();
         Set<Long> visitedEnd = new HashSet<>();
         
@@ -101,22 +104,23 @@ public class WaterPathfinderAStar {
         nodesEnd.put(hash(endX, endZ), endNode);
         
         int iterations = 0;
-        int maxIterations = 1000000; // НЕТ РЕАЛЬНЫХ ОГРАНИЧЕНИЙ!
+        int maxIterations = 1000000;
         
         AStarNode meetingPointStart = null;
         AStarNode meetingPointEnd = null;
+        
+        // Статистика для cost system
+        double totalCostAccumulated = 0;
+        int costsCalculated = 0;
         
         // MAIN LOOP
         while (!openStart.isEmpty() && !openEnd.isEmpty() && iterations < maxIterations) {
             iterations++;
             
-            // Progress log каждые 10000 итераций
             if (iterations % 10000 == 0) {
                 plugin.getLogger().info("A* progress: iter=" + iterations + 
                     ", openStart=" + openStart.size() + 
-                    ", openEnd=" + openEnd.size() +
-                    ", visitedStart=" + visitedStart.size() +
-                    ", visitedEnd=" + visitedEnd.size());
+                    ", openEnd=" + openEnd.size());
             }
             
             // === EXPAND FROM START ===
@@ -143,12 +147,26 @@ public class WaterPathfinderAStar {
                     
                     if (visitedStart.contains(neighborHash)) continue;
                     
-                    // ИСПРАВЛЕНО: Проверяем воду в кеше (только X и Z!)
+                    // Проверяем воду
                     if (!isWaterCached(nx, nz)) continue;
                     
-                    // Calculate costs
+                    // ===== COST CALCULATION =====
+                    // Базовая дистанция движения (Euclidean для диагоналей)
                     double moveCost = Math.sqrt(dir[0] * dir[0] + dir[1] * dir[1]);
-                    double newGCost = current.gCost + moveCost;
+                    
+                    // Получаем cost блока (1-100)
+                    int blockCost = getBlockCost(nx, nz);
+                    
+                    // ИТОГОВАЯ СТОИМОСТЬ = дистанция * cost блока
+                    // Глубокая вода (cost=1): moveCost * 1 = дешево!
+                    // У берега (cost=5): moveCost * 5 = дорого!
+                    // 
+                    // ВАЖНО: Узкий пролив (100 блоков * 5) = 500
+                    //        Обход (5000 блоков * 1) = 5000
+                    //        → A* выберет ПРОЛИВ!
+                    double totalMoveCost = moveCost * blockCost;
+                    
+                    double newGCost = current.gCost + totalMoveCost;
                     double hCost = calculateHeuristic(nx, nz, endX, endZ);
                     
                     AStarNode neighbor = nodesStart.get(neighborHash);
@@ -156,8 +174,10 @@ public class WaterPathfinderAStar {
                         neighbor = new AStarNode(nx, nz, newGCost, hCost, current, true);
                         nodesStart.put(neighborHash, neighbor);
                         openStart.add(neighbor);
+                        
+                        totalCostAccumulated += blockCost;
+                        costsCalculated++;
                     } else if (newGCost < neighbor.gCost) {
-                        // Found better path
                         openStart.remove(neighbor);
                         neighbor.gCost = newGCost;
                         neighbor.fCost = newGCost + hCost;
@@ -172,7 +192,6 @@ public class WaterPathfinderAStar {
                 AStarNode current = openEnd.poll();
                 long currentHash = hash(current.x, current.z);
                 
-                // Проверка встречи волн
                 if (visitedStart.contains(currentHash)) {
                     meetingPointEnd = current;
                     meetingPointStart = nodesStart.get(currentHash);
@@ -183,20 +202,19 @@ public class WaterPathfinderAStar {
                 if (visitedEnd.contains(currentHash)) continue;
                 visitedEnd.add(currentHash);
                 
-                // Explore neighbors
                 for (int[] dir : DIRECTIONS) {
                     int nx = current.x + dir[0];
                     int nz = current.z + dir[1];
                     long neighborHash = hash(nx, nz);
                     
                     if (visitedEnd.contains(neighborHash)) continue;
-                    
-                    // ИСПРАВЛЕНО: Проверяем воду в кеше (только X и Z!)
                     if (!isWaterCached(nx, nz)) continue;
                     
-                    // Calculate costs
                     double moveCost = Math.sqrt(dir[0] * dir[0] + dir[1] * dir[1]);
-                    double newGCost = current.gCost + moveCost;
+                    int blockCost = getBlockCost(nx, nz);
+                    double totalMoveCost = moveCost * blockCost;
+                    
+                    double newGCost = current.gCost + totalMoveCost;
                     double hCost = calculateHeuristic(nx, nz, startX, startZ);
                     
                     AStarNode neighbor = nodesEnd.get(neighborHash);
@@ -204,8 +222,10 @@ public class WaterPathfinderAStar {
                         neighbor = new AStarNode(nx, nz, newGCost, hCost, current, false);
                         nodesEnd.put(neighborHash, neighbor);
                         openEnd.add(neighbor);
+                        
+                        totalCostAccumulated += blockCost;
+                        costsCalculated++;
                     } else if (newGCost < neighbor.gCost) {
-                        // Found better path
                         openEnd.remove(neighbor);
                         neighbor.gCost = newGCost;
                         neighbor.fCost = newGCost + hCost;
@@ -222,7 +242,6 @@ public class WaterPathfinderAStar {
         if (meetingPointStart == null || meetingPointEnd == null) {
             plugin.getLogger().warning("✗ No path found!");
             plugin.getLogger().warning("Iterations: " + iterations);
-            plugin.getLogger().warning("Visited nodes: " + (visitedStart.size() + visitedEnd.size()));
             plugin.getLogger().warning("Time: " + (elapsedTime / 1000.0) + "s");
             return null;
         }
@@ -233,20 +252,22 @@ public class WaterPathfinderAStar {
         Collections.reverse(pathFromEnd);
         
         List<Location> fullPath = new ArrayList<>(pathFromStart);
-        // Не дублируем точку встречи
         if (!pathFromEnd.isEmpty()) {
             pathFromEnd.remove(0);
         }
         fullPath.addAll(pathFromEnd);
         
+        // Вычисляем средний cost пути
+        double avgCost = costsCalculated > 0 ? totalCostAccumulated / costsCalculated : 0;
+        
         // Statistics
         plugin.getLogger().info("✓ PATH FOUND!");
-        plugin.getLogger().info("Algorithm: Bidirectional A*");
+        plugin.getLogger().info("Algorithm: Bidirectional A* + Cost System");
         plugin.getLogger().info("Iterations: " + iterations);
-        plugin.getLogger().info("Visited from START: " + visitedStart.size());
-        plugin.getLogger().info("Visited from END: " + visitedEnd.size());
-        plugin.getLogger().info("Total visited: " + (visitedStart.size() + visitedEnd.size()));
+        plugin.getLogger().info("Visited: " + (visitedStart.size() + visitedEnd.size()));
         plugin.getLogger().info("Path waypoints: " + fullPath.size());
+        plugin.getLogger().info("Average block cost: " + String.format("%.1f", avgCost) + 
+            " (1=deep water, 5=shore)");
         plugin.getLogger().info("Time: " + (elapsedTime / 1000.0) + "s");
         
         // Конвертируем в Location с правильным Y
@@ -262,7 +283,23 @@ public class WaterPathfinderAStar {
     }
     
     /**
-     * Reconstruct path from node to start/end
+     * Получить cost блока (1-100)
+     * Приоритет: кеш -> default
+     */
+    private int getBlockCost(int x, int z) {
+        Integer cachedCost = cache.getCost(x, z);
+        
+        if (cachedCost != null) {
+            return cachedCost;
+        }
+        
+        // Нет в кеше - используем default
+        // (будет уточнено когда игрок прогрузит чанк)
+        return 1; // Оптимистично считаем глубокой водой
+    }
+    
+    /**
+     * Reconstruct path from node
      */
     private List<Location> reconstructPath(AStarNode endNode, boolean fromStart) {
         List<Location> path = new ArrayList<>();
@@ -271,9 +308,9 @@ public class WaterPathfinderAStar {
         while (current != null) {
             Location loc = new Location(null, current.x + 0.5, seaLevel, current.z + 0.5);
             if (fromStart) {
-                path.add(0, loc); // Add to beginning
+                path.add(0, loc);
             } else {
-                path.add(loc); // Add to end
+                path.add(loc);
             }
             current = current.parent;
         }
@@ -289,41 +326,29 @@ public class WaterPathfinderAStar {
     }
     
     /**
-     * Проверка воды - ДИНАМИЧЕСКАЯ, БЕЗ ОГРАНИЧЕНИЙ!
-     * Если блок не в кеше - проверяем напрямую
+     * Проверка воды из кеша
      */
     private boolean isWaterCached(int x, int z) {
         Boolean result = cache.isWater(x, z);
         
         if (result != null) {
-            return result; // Уже в кеше
+            return result;
         }
         
-        // НЕ В КЕШЕ - проверяем напрямую!
-        if (world != null) {
-            try {
-                org.bukkit.block.Block block = world.getBlockAt(x, seaLevel, z);
-                org.bukkit.Material material = block.getType();
-                return material == org.bukkit.Material.WATER || 
-                       material.toString().contains("WATER");
-            } catch (Exception e) {
-                // Чанк не загружен
-                return false;
-            }
-        }
-        
+        // Нет в кеше - оптимистично считаем водой
+        // (будет уточнено при загрузке чанка)
         return false;
     }
     
     /**
-     * Heuristic function - Manhattan distance (быстрее чем Euclidean)
+     * Heuristic function - Manhattan distance
      */
     private double calculateHeuristic(int x1, int z1, int x2, int z2) {
         return Math.abs(x2 - x1) + Math.abs(z2 - z1);
     }
     
     /**
-     * Actual distance (для статистики)
+     * Actual distance
      */
     private double calculateDistance(int x1, int z1, int x2, int z2) {
         int dx = x2 - x1;
@@ -348,11 +373,11 @@ public class WaterPathfinderAStar {
      */
     private static class AStarNode implements Comparable<AStarNode> {
         int x, z;
-        double gCost; // Cost from start
+        double gCost; // Cost from start (ВКЛЮЧАЕТ cost блоков!)
         double hCost; // Heuristic to goal
         double fCost; // gCost + hCost
         AStarNode parent;
-        boolean fromStart; // true if from start wave, false if from end wave
+        boolean fromStart;
         
         AStarNode(int x, int z, double gCost, double hCost, AStarNode parent, boolean fromStart) {
             this.x = x;
@@ -368,8 +393,6 @@ public class WaterPathfinderAStar {
         public int compareTo(AStarNode other) {
             int result = Double.compare(this.fCost, other.fCost);
             if (result == 0) {
-                // Если f_cost равны, выбираем с меньшей эвристикой
-                // (ближе к цели)
                 result = Double.compare(this.hCost, other.hCost);
             }
             return result;

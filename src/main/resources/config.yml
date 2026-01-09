@@ -68,6 +68,9 @@ boat:
   # Maximum velocity cap
   max-velocity: 4.0
 
+  smoothness: 0.1
+
+  waypoint-radius: 3.0
 # ===== GUI SETTINGS =====
 gui:
   # Ticks between GUI updates

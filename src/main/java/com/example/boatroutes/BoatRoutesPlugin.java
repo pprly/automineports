@@ -16,6 +16,7 @@ import com.example.boatroutes.port.PortManager;
 import com.example.boatroutes.route.RouteManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import com.example.boatroutes.commands.ExportCommand;
+import com.example.boatroutes.listeners.ChunkLoadListener;
 
 public class BoatRoutesPlugin extends JavaPlugin {
     
@@ -31,13 +32,13 @@ public class BoatRoutesPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        
+
         getLogger().info("=================================");
-        getLogger().info("BoatRoutes v2.0 - BFS Edition");
+        getLogger().info("BoatRoutes v6.0 - Cost System Edition");
         getLogger().info("=================================");
-        
+
         getLogger().info("Initializing managers...");
-        
+
         portManager = new PortManager(this);
         dockManager = new DockManager(this);
         npcManager = new NPCManager(this);
@@ -46,27 +47,29 @@ public class BoatRoutesPlugin extends JavaPlugin {
         boatManager = new BoatManager(this);
         navigationManager = new NavigationManager(this);
         guiManager = new GUIManager(this);
-        
+
         getLogger().info("Registering commands...");
         getCommand("port").setExecutor(new PortCommand(this));
         getCommand("port").setTabCompleter(new PortTabCompleter(this));
         getCommand("export-cache").setExecutor(new ExportCommand(this));
-        
+
         getLogger().info("Registering listeners...");
         getServer().getPluginManager().registerEvents(new VehicleListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerListener(this), this);
         getServer().getPluginManager().registerEvents(new NPCListener(this), this);
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
-        
+        getServer().getPluginManager().registerEvents(
+               new ChunkLoadListener(this, pathfindingManager.getCache()), this);
+
         getLogger().info("Loading data...");
         portManager.loadAllPorts();
         boatManager.loadAllBoats();
         routeManager.loadAllRoutes();
         pathfindingManager.loadAllPaths();
-        
+
         getLogger().info("=================================");
-        getLogger().info("BoatRoutes enabled successfully!");
-        getLogger().info("Features: BFS Pathfinding, Navigation Book");
+        getLogger().info("BoatRoutes v6.0 enabled successfully!");
+        getLogger().info("Features: Cost-based A*, Passive Caching");
         getLogger().info("=================================");
     }
     

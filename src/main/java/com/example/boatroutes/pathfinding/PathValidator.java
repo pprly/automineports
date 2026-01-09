@@ -8,15 +8,15 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 
 /**
- * PathValidator v4.0 - Проверка навигабельности воды
+ * PathValidator v5.0 - С COST CALCULATION!
  * 
- * Особенности:
- * - Использует кеш для непрогруженных чанков
- * - Поддержка разных типов воды
- * - Быстрое кеширование регионов
+ * НОВОЕ:
+ * - preCacheRegion теперь вычисляет cost
+ * - Проверяет 8 соседей для каждого блока
+ * - Сохраняет isWater + cost в кеш
  * 
  * @author BoatRoutes Team
- * @version 4.0
+ * @version 5.0-COST
  */
 public class PathValidator {
     
@@ -26,6 +26,12 @@ public class PathValidator {
     private int seaLevel;
     private int minDepth;
     private int safetyRadius;
+    
+    // 8 направлений для проверки соседей
+    private static final int[][] DIRECTIONS = {
+        {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+        {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+    };
     
     public PathValidator(BoatRoutesPlugin plugin, WaterWorldCache cache) {
         this.plugin = plugin;
@@ -60,17 +66,17 @@ public class PathValidator {
         // Если кеша нет - проверяем мир напрямую
         // (только если чанк прогружен)
         if (!isChunkLoaded(world, x, z)) {
-            // Чанк не прогружен и нет в кеше - считаем водой
-            // (будет уточнено позже при прогрузке)
-            return true;
+            // Чанк не прогружен и нет в кеше - считаем землёй!
+            return false;
         }
         
         // Проверяем блок
         Block block = world.getBlockAt(x, y, z);
         boolean isWater = isWaterBlock(block);
         
-        // Кешируем результат
-        cache.setWater(x, z, isWater);
+        // Кешируем результат С COST!
+        int cost = calculateCostForBlock(x, z, isWater, world, y);
+        cache.setWater(x, z, isWater, cost);
         
         return isWater;
     }
@@ -88,6 +94,109 @@ public class PathValidator {
     }
     
     /**
+     * Предварительное кеширование региона С COST CALCULATION!
+     * 
+     * @param min Минимальный угол региона
+     * @param max Максимальный угол региона
+     */
+    public void preCacheRegion(Location min, Location max) {
+        World world = min.getWorld();
+        
+        int minX = Math.min(min.getBlockX(), max.getBlockX());
+        int maxX = Math.max(min.getBlockX(), max.getBlockX());
+        int minZ = Math.min(min.getBlockZ(), max.getBlockZ());
+        int maxZ = Math.max(min.getBlockZ(), max.getBlockZ());
+        
+        int y = seaLevel;
+        int stepSize = 2; // Кешируем каждый второй блок
+        
+        int cachedCount = 0;
+        int waterCount = 0;
+        
+        plugin.getLogger().info("Pre-caching region with COSTS: " + minX + "," + minZ + " to " + maxX + "," + maxZ);
+        
+        for (int x = minX; x <= maxX; x += stepSize) {
+            for (int z = minZ; z <= maxZ; z += stepSize) {
+                // Проверяем, есть ли уже в кеше
+                if (cache.isWater(x, z) != null) {
+                    cachedCount++;
+                    continue;
+                }
+                
+                // Если чанк прогружен - читаем из мира
+                if (isChunkLoaded(world, x, z)) {
+                    Block block = world.getBlockAt(x, y, z);
+                    boolean isWater = isWaterBlock(block);
+                    
+                    // ВЫЧИСЛЯЕМ COST!
+                    int cost = calculateCostForBlock(x, z, isWater, world, y);
+                    
+                    // Сохраняем с cost
+                    cache.setWater(x, z, isWater, cost);
+                    if (isWater) waterCount++;
+                } else {
+                    // Чанк не прогружен - НЕ кешируем
+                    // (будет закеширован при загрузке через ChunkLoadListener)
+                }
+                
+                cachedCount++;
+            }
+        }
+        
+        plugin.getLogger().info("Pre-cache complete: " + cachedCount + " blocks, " + waterCount + " water (with costs)");
+    }
+    
+    /**
+     * Вычисляет cost блока на основе соседей
+     * 
+     * Cost system:
+     * - LAND = 100
+     * - Water 3+ land neighbors = 5 (у берега)
+     * - Water 2 land neighbors = 3
+     * - Water 1 land neighbor = 2
+     * - Water 0 land neighbors = 1 (глубокая вода!)
+     */
+    private int calculateCostForBlock(int x, int z, boolean isWater, World world, int y) {
+        if (!isWater) {
+            return 100; // ЗЕМЛЯ
+        }
+        
+        // Считаем сколько земли вокруг
+        int landNeighbors = 0;
+        
+        for (int[] dir : DIRECTIONS) {
+            int nx = x + dir[0];
+            int nz = z + dir[1];
+            
+            // Проверяем соседа
+            Boolean neighborCached = cache.isWater(nx, nz);
+            
+            boolean neighborIsWater;
+            if (neighborCached != null) {
+                // Есть в кеше
+                neighborIsWater = neighborCached;
+            } else if (isChunkLoaded(world, nx, nz)) {
+                // Чанк загружен - проверяем напрямую
+                Block neighbor = world.getBlockAt(nx, y, nz);
+                neighborIsWater = isWaterBlock(neighbor);
+            } else {
+                // Чанк не загружен - оптимистично считаем водой
+                neighborIsWater = true;
+            }
+            
+            if (!neighborIsWater) {
+                landNeighbors++;
+            }
+        }
+        
+        // Конвертируем количество земли в cost
+        if (landNeighbors >= 3) return 5;  // Очень близко к берегу
+        if (landNeighbors == 2) return 3;  // Близко к берегу
+        if (landNeighbors == 1) return 2;  // Немного от берега
+        return 1;                           // Глубокая вода!
+    }
+    
+    /**
      * Проверяет, является ли блок водой
      */
     public boolean isWaterBlock(Block block) {
@@ -98,7 +207,7 @@ public class PathValidator {
         // Основные типы воды
         if (type == Material.WATER) return true;
         
-        // Проверка на waterlogged блоки и другие водные типы
+        // Проверка на waterlogged блоки
         String typeName = type.toString();
         if (typeName.contains("WATER")) return true;
         
@@ -119,57 +228,6 @@ public class PathValidator {
         int chunkX = x >> 4;
         int chunkZ = z >> 4;
         return world.isChunkLoaded(chunkX, chunkZ);
-    }
-    
-    /**
-     * Предварительное кеширование региона.
-     * Загружает данные о воде в указанной области.
-     * 
-     * @param min Минимальный угол региона
-     * @param max Максимальный угол региона
-     */
-    public void preCacheRegion(Location min, Location max) {
-        World world = min.getWorld();
-        
-        int minX = Math.min(min.getBlockX(), max.getBlockX());
-        int maxX = Math.max(min.getBlockX(), max.getBlockX());
-        int minZ = Math.min(min.getBlockZ(), max.getBlockZ());
-        int maxZ = Math.max(min.getBlockZ(), max.getBlockZ());
-        
-        int y = seaLevel;
-        int stepSize = 2; // Кешируем каждый второй блок для скорости
-        
-        int totalBlocks = ((maxX - minX) / stepSize + 1) * ((maxZ - minZ) / stepSize + 1);
-        int cachedCount = 0;
-        int waterCount = 0;
-        
-        plugin.getLogger().info("Pre-caching region: " + minX + "," + minZ + " to " + maxX + "," + maxZ);
-        
-        for (int x = minX; x <= maxX; x += stepSize) {
-            for (int z = minZ; z <= maxZ; z += stepSize) {
-                // Проверяем, есть ли уже в кеше
-                if (cache.isWater(x, z) != null) {
-                    cachedCount++;
-                    continue;
-                }
-                
-                // Если чанк прогружен - читаем из мира
-                if (isChunkLoaded(world, x, z)) {
-                    Block block = world.getBlockAt(x, y, z);
-                    boolean isWater = isWaterBlock(block);
-                    cache.setWater(x, z, isWater);
-                    if (isWater) waterCount++;
-                } else {
-                    // Чанк не прогружен - пробуем загрузить через chunk snapshot
-                    // или помечаем как "unknown" для позднего определения
-                    cache.setWater(x, z, true); // Оптимистично считаем водой
-                }
-                
-                cachedCount++;
-            }
-        }
-        
-        plugin.getLogger().info("Pre-cache complete: " + cachedCount + " blocks, " + waterCount + " water");
     }
     
     /**

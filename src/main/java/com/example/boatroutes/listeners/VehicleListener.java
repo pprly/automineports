@@ -9,6 +9,15 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.vehicle.*;
 
+/**
+ * VehicleListener v2.0 - С AUTOPILOT INTEGRATION!
+ * 
+ * НОВОЕ:
+ * - Останавливает autopilot при выходе из лодки
+ * 
+ * @author BoatRoutes Team
+ * @version 2.0-AUTOPILOT
+ */
 public class VehicleListener implements Listener {
     
     private final BoatRoutesPlugin plugin;
@@ -37,6 +46,8 @@ public class VehicleListener implements Listener {
         
         // Store current port for player
         plugin.getBoatManager().setCreationPort(player.getUniqueId(), currentPort.getName());
+        
+        plugin.getLogger().info("Player " + player.getName() + " entered boat at port: " + currentPort.getName());
     }
     
     @EventHandler
@@ -46,6 +57,16 @@ public class VehicleListener implements Listener {
         
         // Remove navigation book
         navigationBook.removeBook(player);
+        
+        // НОВОЕ: Останавливаем autopilot если был активен
+        if (plugin.getNavigationManager().hasActiveAutopilot(player.getUniqueId())) {
+            plugin.getNavigationManager().stopAutopilot(
+                player.getUniqueId(), 
+                "Player exited boat"
+            );
+            
+            plugin.getLogger().info("Stopped autopilot for " + player.getName() + " (exited boat)");
+        }
     }
     
     @EventHandler
@@ -66,6 +87,9 @@ public class VehicleListener implements Listener {
         }
     }
     
+    /**
+     * Найти порт для лодки (проверяет близость к порту)
+     */
     private Port findPortForBoat(Boat boat) {
         for (Port port : plugin.getPortManager().getAllPorts()) {
             if (port.getNPCLocation() != null && 
