@@ -12,16 +12,15 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * BoatAutopilot v3.0 - SMOOTH PHYSICS + UPGRADE SUPPORT!
+ * BoatAutopilot v3.1 - SMOOTH PHYSICS + STUCK DETECTION!
  *
- * НОВОЕ:
- * - Плавное движение с инерцией (как настоящая лодка!)
- * - Поддержка улучшений скорости лодки
- * - Естественное поведение при поворотах
- * - Bidirectional path support
+ * НОВОЕ v3.1:
+ * - Детекция застревания (10 секунд без прогресса)
+ * - Автоматическая остановка при тупике
+ * - Улучшенное логирование
  *
  * @author BoatRoutes Team
- * @version 3.0-SMOOTH-PHYSICS
+ * @version 3.1-STUCK-FIX
  */
 public class BoatAutopilot {
 
@@ -35,10 +34,13 @@ public class BoatAutopilot {
     private int currentWaypointIndex;
     private BukkitTask task;
 
+    // ✅ НОВОЕ: Отслеживание прогресса
+    private long lastProgressTime;
+
     // Настройки движения
-    private double baseSpeed;           // Базовая скорость (из config или улучшений)
-    private double smoothness;          // Плавность (0.05-0.2, чем меньше = плавнее)
-    private double waypointRadius;      // Радиус достижения waypoint
+    private double baseSpeed;
+    private double smoothness;
+    private double waypointRadius;
 
     public BoatAutopilot(BoatRoutesPlugin plugin, Boat boat, Player player,
                          String fromPort, String toPort) {
@@ -53,13 +55,8 @@ public class BoatAutopilot {
         this.smoothness = plugin.getConfig().getDouble("boat.smoothness", 0.1);
         this.waypointRadius = plugin.getConfig().getDouble("boat.waypoint-radius", 3.0);
 
-        // TODO: В будущем загружать скорость из PlayerBoat upgrades!
-        // PlayerBoat playerBoat = plugin.getBoatManager().getPlayerBoat(player.getUniqueId());
-        // if (playerBoat != null) {
-        //     this.baseSpeed = playerBoat.getSpeed(); // Скорость с улучшениями!
-        // }
-
         this.currentWaypointIndex = 0;
+        this.lastProgressTime = System.currentTimeMillis();
     }
 
     /**
@@ -103,6 +100,7 @@ public class BoatAutopilot {
         player.sendMessage("§7Exit boat to cancel autopilot");
 
         currentWaypointIndex = 0;
+        lastProgressTime = System.currentTimeMillis();
 
         // Запускаем движение (каждый тик = 0.05 секунды)
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::updateBoatMovement, 0L, 1L);
@@ -113,7 +111,7 @@ public class BoatAutopilot {
     }
 
     /**
-     * Обновляет движение лодки каждый тик (ПЛАВНОЕ ДВИЖЕНИЕ!)
+     * Обновляет движение лодки каждый тик (ПЛАВНОЕ ДВИЖЕНИЕ + STUCK DETECTION!)
      */
     private void updateBoatMovement() {
         // === SAFETY CHECKS ===
@@ -150,6 +148,7 @@ public class BoatAutopilot {
         // Если близко к waypoint - переходим к следующему
         if (distance < waypointRadius) {
             currentWaypointIndex++;
+            lastProgressTime = System.currentTimeMillis(); // ✅ Обновляем время прогресса
 
             // Показываем прогресс каждые 10 waypoints
             if (currentWaypointIndex % 10 == 0 || currentWaypointIndex < 3) {
@@ -164,6 +163,26 @@ public class BoatAutopilot {
             return;
         }
 
+        // ✅ НОВОЕ: ДЕТЕКЦИЯ ЗАСТРЕВАНИЯ
+        // Если нет прогресса 10 секунд - лодка застряла (тупик!)
+        if (System.currentTimeMillis() - lastProgressTime > 10000) {
+            plugin.getLogger().warning("⚠ Boat stuck at waypoint " + currentWaypointIndex + "!");
+            plugin.getLogger().warning("  Boat location: " + boatLoc.getBlockX() + "," +
+                    boatLoc.getBlockY() + "," + boatLoc.getBlockZ());
+            plugin.getLogger().warning("  Target: " + target.getBlockX() + "," +
+                    target.getBlockY() + "," + target.getBlockZ());
+            plugin.getLogger().warning("  Distance: " + String.format("%.2f", distance));
+
+            player.sendMessage("");
+            player.sendMessage("§c✗ Navigation error: Boat stuck!");
+            player.sendMessage("§7Possible dead end detected");
+            player.sendMessage("§7Try: §e/port reconnect " + fromPort + " " + toPort);
+            player.sendMessage("");
+
+            stopJourney("Boat stuck - possible dead end");
+            return;
+        }
+
         // === SMOOTH MOVEMENT ===
 
         // Вычисляем направление к waypoint (нормализованный вектор XZ)
@@ -175,26 +194,20 @@ public class BoatAutopilot {
         // Текущая скорость лодки
         Vector currentVelocity = boat.getVelocity();
 
-        // ПЛАВНАЯ ИНТЕРПОЛЯЦИЯ (добавляем только часть разницы)
-        // smoothness = 0.1 означает "корректируем на 10% каждый тик"
-        // Это создаёт плавное ускорение и торможение!
+        // ПЛАВНАЯ ИНТЕРПОЛЯЦИЯ
         Vector velocityDiff = targetVelocity.subtract(currentVelocity);
         Vector force = velocityDiff.multiply(smoothness);
 
         // Применяем новую скорость
         Vector newVelocity = currentVelocity.add(force);
 
-        // Ограничиваем максимальную скорость (для безопасности)
+        // Ограничиваем максимальную скорость
         double maxSpeed = baseSpeed * 1.5;
         if (newVelocity.length() > maxSpeed) {
             newVelocity = newVelocity.normalize().multiply(maxSpeed);
         }
 
         boat.setVelocity(newVelocity);
-
-        // ЛОДКА АВТОМАТИЧЕСКИ ПОВЕРНЁТСЯ В НАПРАВЛЕНИИ ДВИЖЕНИЯ!
-        // Minecraft сам поворачивает entity в направлении velocity
-        // Не нужно teleport или setRotation!
     }
 
     /**
@@ -227,7 +240,7 @@ public class BoatAutopilot {
         // Плавная остановка лодки
         if (boat != null && !boat.isDead()) {
             Vector currentVel = boat.getVelocity();
-            boat.setVelocity(currentVel.multiply(0.5)); // Замедляем вместо резкой остановки
+            boat.setVelocity(currentVel.multiply(0.5));
         }
 
         if (reason != null) {
