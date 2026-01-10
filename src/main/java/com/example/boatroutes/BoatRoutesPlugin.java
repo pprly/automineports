@@ -15,7 +15,6 @@ import com.example.boatroutes.navigation.NavigationManager;
 import com.example.boatroutes.npc.NPCManager;
 import com.example.boatroutes.pathfinding.PathfindingManager;
 import com.example.boatroutes.port.PortManager;
-import com.example.boatroutes.route.RouteManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class BoatRoutesPlugin extends JavaPlugin {
@@ -23,7 +22,6 @@ public class BoatRoutesPlugin extends JavaPlugin {
     private PortManager portManager;
     private DockManager dockManager;
     private BoatManager boatManager;
-    private RouteManager routeManager;
     private PathfindingManager pathfindingManager;
     private NavigationManager navigationManager;
     private NPCManager npcManager;
@@ -42,7 +40,6 @@ public class BoatRoutesPlugin extends JavaPlugin {
         portManager = new PortManager(this);
         dockManager = new DockManager(this);
         npcManager = new NPCManager(this);
-        routeManager = new RouteManager(this);
         pathfindingManager = new PathfindingManager(this);
         boatManager = new BoatManager(this);
         navigationManager = new NavigationManager(this);
@@ -64,7 +61,6 @@ public class BoatRoutesPlugin extends JavaPlugin {
         getLogger().info("Loading data...");
         portManager.loadAllPorts();
         boatManager.loadAllBoats();
-        routeManager.loadAllRoutes();
         pathfindingManager.loadAllPaths();
 
         getLogger().info("=================================");
@@ -79,7 +75,6 @@ public class BoatRoutesPlugin extends JavaPlugin {
         
         if (portManager != null) portManager.saveAllPorts();
         if (boatManager != null) boatManager.saveAllBoats();
-        if (routeManager != null) routeManager.saveAllRoutes();
         
         if (navigationManager != null) navigationManager.stopAllAutopilots();
         
@@ -97,10 +92,7 @@ public class BoatRoutesPlugin extends JavaPlugin {
     public BoatManager getBoatManager() {
         return boatManager;
     }
-    
-    public RouteManager getRouteManager() {
-        return routeManager;
-    }
+
     
     public PathfindingManager getPathfindingManager() {
         return pathfindingManager;

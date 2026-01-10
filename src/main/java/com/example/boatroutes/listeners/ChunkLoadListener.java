@@ -13,14 +13,16 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkLoadEvent;
 
 /**
- * ChunkLoadListener v1.1 - Passive Caching System + ISOLATED WATER DETECTION
+ * ChunkLoadListener v2.0 - Shore Distance Cost System
  *
- * ИСПРАВЛЕНО v1.1:
- * - Добавлена проверка на изолированную воду (тупики)
- * - Повышенный cost (8) для изолированных блоков
+ * НОВОЕ v2.0:
+ * - Проверка расстояния до берега (1-5+ блоков)
+ * - Новая система cost: чем дальше от берега = дешевле
+ * - Земля = 999 (непроходимо)
+ * - Тупики = 100 (очень дорого)
  *
  * @author BoatRoutes Team
- * @version 1.1-ISOLATED-FIX
+ * @version 2.0-SHORE-DISTANCE
  */
 public class ChunkLoadListener implements Listener {
 
@@ -34,7 +36,7 @@ public class ChunkLoadListener implements Listener {
             {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
     };
 
-    // ✅ НОВОЕ: 8 направлений для проверки изолированности (на расстоянии 5)
+    // 8 направлений для проверки изолированности (на расстоянии 5)
     private static final int[][] LONG_DIRECTIONS = {
             {5, 0}, {-5, 0}, {0, 5}, {0, -5},
             {5, 5}, {5, -5}, {-5, 5}, {-5, -5}
@@ -71,7 +73,7 @@ public class ChunkLoadListener implements Listener {
     }
 
     /**
-     * Кеширует весь чанк: воду + cost + isolated detection
+     * Кеширует весь чанк: воду + cost (shore distance + isolated detection)
      */
     private void cacheChunk(Chunk chunk) {
         int chunkX = chunk.getX() * 16;
@@ -94,7 +96,7 @@ public class ChunkLoadListener implements Listener {
                 Block block = chunk.getBlock(x, seaLevel, z);
                 boolean isWater = isWaterBlock(block);
 
-                // Вычисляем cost (проверяем 8 соседей + изолированность)
+                // Вычисляем cost (shore distance + изолированность)
                 int cost = calculateCost(chunk, x, z, isWater, worldX, worldZ);
 
                 // Сохраняем в кеш
@@ -115,73 +117,90 @@ public class ChunkLoadListener implements Listener {
     }
 
     /**
-     * Вычисляет cost блока на основе соседей + изолированности
+     * Вычисляет расстояние до ближайшего берега (1-6+ блоков)
+     */
+    private int calculateShoreDistance(Chunk chunk, int localX, int localZ, int worldX, int worldZ) {
+        // Проверяем радиусы от 1 до 5
+        for (int radius = 1; radius <= 5; radius++) {
+            // Проверяем квадрат на этом радиусе
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    // Только края квадрата (не внутренность)
+                    if (Math.abs(dx) != radius && Math.abs(dz) != radius) continue;
+
+                    int checkLocalX = localX + dx;
+                    int checkLocalZ = localZ + dz;
+                    int checkWorldX = worldX + dx;
+                    int checkWorldZ = worldZ + dz;
+
+                    boolean isLand;
+
+                    // Проверяем внутри чанка или из кеша
+                    if (checkLocalX >= 0 && checkLocalX < 16 && checkLocalZ >= 0 && checkLocalZ < 16) {
+                        Block block = chunk.getBlock(checkLocalX, seaLevel, checkLocalZ);
+                        isLand = !isWaterBlock(block);
+                    } else {
+                        // Другой чанк - проверяем кеш
+                        Boolean cached = cache.isWater(checkWorldX, checkWorldZ);
+                        isLand = (cached != null && !cached);
+                    }
+
+                    if (isLand) {
+                        return radius; // Нашли берег на расстоянии radius!
+                    }
+                }
+            }
+        }
+
+        return 6; // Берег дальше 5 блоков
+    }
+
+    /**
+     * Вычисляет cost блока на основе расстояния до берега + изолированности
      *
      * Cost system:
-     * - LAND = 100 (избегать!)
-     * - Water 3+ land neighbors = 5 (у берега)
-     * - Water 2 land neighbors = 3
-     * - Water 1 land neighbor = 2
-     * - Water 0 land neighbors = 1 (глубокая вода - оптимально!)
-     * - ✅ НОВОЕ: Isolated water = 8 (тупик!)
+     * - LAND = 999 (непроходимо!)
+     * - Water 1 блок от берега = 50
+     * - Water 2 блока от берега = 30
+     * - Water 3 блока от берега = 10
+     * - Water 4 блока от берега = 5
+     * - Water 5 блоков от берега = 2
+     * - Water 6+ блоков от берега = 1 (оптимально!)
+     * - Isolated water (тупик) = 100
      */
     private int calculateCost(Chunk chunk, int localX, int localZ, boolean isWater,
                               int worldX, int worldZ) {
 
         if (!isWater) {
-            return 100; // ЗЕМЛЯ
+            return 999; // ЗЕМЛЯ - НЕПРОХОДИМО!
         }
 
-        // Считаем сколько земли вокруг (8 ближайших соседей)
-        int landNeighbors = 0;
+        // Вычисляем расстояние до берега
+        int shoreDistance = calculateShoreDistance(chunk, localX, localZ, worldX, worldZ);
 
-        for (int[] dir : DIRECTIONS) {
-            int nx = localX + dir[0];
-            int nz = localZ + dir[1];
-
-            boolean neighborIsWater;
-
-            // Если сосед внутри чанка - проверяем напрямую
-            if (nx >= 0 && nx < 16 && nz >= 0 && nz < 16) {
-                Block neighbor = chunk.getBlock(nx, seaLevel, nz);
-                neighborIsWater = isWaterBlock(neighbor);
-            } else {
-                // Сосед в другом чанке - проверяем кеш
-                int neighborWorldX = worldX + dir[0];
-                int neighborWorldZ = worldZ + dir[1];
-
-                Boolean cached = cache.isWater(neighborWorldX, neighborWorldZ);
-
-                if (cached != null) {
-                    neighborIsWater = cached;
-                } else {
-                    // Нет в кеше - оптимистично считаем водой
-                    neighborIsWater = true;
-                }
-            }
-
-            if (!neighborIsWater) {
-                landNeighbors++;
-            }
-        }
-
-        // Базовый cost на основе ближайших соседей
         int baseCost;
-        if (landNeighbors >= 3) baseCost = 5;  // Очень близко к берегу
-        else if (landNeighbors == 2) baseCost = 3;  // Близко к берегу
-        else if (landNeighbors == 1) baseCost = 2;  // Немного от берега
-        else baseCost = 1;                           // Глубокая вода!
 
-        // ✅ НОВОЕ: Проверка на изолированность (тупики)
+        // Чем ближе к берегу = тем ДОРОЖЕ (больше cost)
+        // Чем дальше от берега = тем ДЕШЕВЛЕ (меньше cost)
+        switch (shoreDistance) {
+            case 1:  baseCost = 50;  break;  // Вплотную к берегу
+            case 2:  baseCost = 30;  break;  // 2 блока
+            case 3:  baseCost = 10;  break;  // 3 блока
+            case 4:  baseCost = 5;   break;  // 4 блока
+            case 5:  baseCost = 2;   break;  // 5 блоков
+            default: baseCost = 1;   break;  // 6+ блоков - ДЁШЕВО!
+        }
+
+        // Проверка на изолированность (тупики)
         if (isIsolatedWater(chunk, localX, localZ, worldX, worldZ)) {
-            baseCost = Math.max(baseCost, 8); // Минимум 8 для изолированных
+            baseCost = Math.max(baseCost, 100); // Тупик = очень дорого
         }
 
         return baseCost;
     }
 
     /**
-     * ✅ НОВОЕ: Проверяет изолированность блока воды
+     * Проверяет изолированность блока воды
      * Возвращает true если < 4 направлений на расстояние 5 блоков имеют воду
      */
     private boolean isIsolatedWater(Chunk chunk, int localX, int localZ,
