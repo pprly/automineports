@@ -78,21 +78,26 @@ public class DockPlacer {
     }
     
     /**
-     * Called when all docks are placed - trigger point calculation
+     * Called when all docks are placed - give navigation point marker
      */
     private void onAllDocksPlaced(Port port, Player player) {
         player.sendMessage("");
         player.sendMessage("§a§l✓ Все причалы установлены!");
-        player.sendMessage("§7Рассчитываем точки выхода и слияния...");
+        player.sendMessage("");
         
-        // Calculate exit/entry points
-        plugin.getDockManager().getDockPointCalculator().calculatePortPoints(port);
+        // Give navigation point marker
+        ItemStack navMarker = createNavigationPointMarker(port.getName());
+        player.getInventory().addItem(navMarker);
+        
+        player.sendMessage("§e⚓ Теперь установите точку навигации!");
+        player.sendMessage("§7ПКМ по воде предметом §bNavigation Point");
+        player.sendMessage("§7Это точка входа/выхода для всех лодок");
+        player.sendMessage("");
+        player.sendMessage("§7Совет: Поставьте точку в §eцентре реки§7,");
+        player.sendMessage("§7подальше от берегов!");
         
         // Save port
         plugin.getPortManager().savePort(port);
-        
-        player.sendMessage("§a✓ Порт §e" + port.getName() + " §aготов к работе!");
-        player.sendMessage("§7Используйте: §e/port connect " + port.getName() + " <другой_порт>");
     }
     
     /**
@@ -113,6 +118,37 @@ public class DockPlacer {
         // Store port name in PDC
         meta.getPersistentDataContainer().set(
             new NamespacedKey(plugin, "port_name"),
+            PersistentDataType.STRING,
+            portName
+        );
+        
+        marker.setItemMeta(meta);
+        return marker;
+    }
+    
+    /**
+     * Create navigation point marker item (NEW!)
+     */
+    private ItemStack createNavigationPointMarker(String portName) {
+        ItemStack marker = new ItemStack(Material.COMPASS);
+        ItemMeta meta = marker.getItemMeta();
+        
+        meta.setDisplayName("§6⚓ Navigation Point");
+        meta.setLore(Arrays.asList(
+            "§7Порт: §f" + portName,
+            "",
+            "§e§lПКМ по воде чтобы установить",
+            "§7точку навигации для лодок",
+            "",
+            "§7Это точка входа/выхода порта",
+            "§7Ставьте в центре реки!",
+            "",
+            "§8Изменить: /port setpoint " + portName
+        ));
+        
+        // Store port name in PDC
+        meta.getPersistentDataContainer().set(
+            new NamespacedKey(plugin, "nav_point_port"),
             PersistentDataType.STRING,
             portName
         );
@@ -172,6 +208,83 @@ public class DockPlacer {
         return meta.getPersistentDataContainer().get(
             new NamespacedKey(plugin, "port_name"),
             PersistentDataType.STRING
+        );
+    }
+    
+    /**
+     * Check if item is a navigation point marker (NEW!)
+     */
+    public boolean isNavigationPointMarker(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        
+        ItemMeta meta = item.getItemMeta();
+        return meta.getPersistentDataContainer().has(
+            new NamespacedKey(plugin, "nav_point_port"),
+            PersistentDataType.STRING
+        );
+    }
+    
+    /**
+     * Get port name from navigation point marker (NEW!)
+     */
+    public String getPortNameFromNavMarker(ItemStack item) {
+        if (!isNavigationPointMarker(item)) return null;
+        
+        ItemMeta meta = item.getItemMeta();
+        return meta.getPersistentDataContainer().get(
+            new NamespacedKey(plugin, "nav_point_port"),
+            PersistentDataType.STRING
+        );
+    }
+    
+    /**
+     * Set navigation point for port (NEW!)
+     */
+    public boolean setNavigationPoint(Port port, Location location, Player player) {
+        // Validation: must be water
+        if (!isWater(location.getBlock().getType())) {
+            player.sendMessage("§c✗ Точка навигации должна быть в воде!");
+            return false;
+        }
+        
+        // Set point
+        port.setNavigationPoint(location.clone());
+        
+        // Save
+        plugin.getPortManager().savePort(port);
+        
+        // Visual feedback
+        visualizeNavigationPoint(location);
+        
+        player.sendMessage("");
+        player.sendMessage("§a✓ Точка навигации установлена!");
+        player.sendMessage("§7Координаты: §f" + location.getBlockX() + ", " + 
+            location.getBlockY() + ", " + location.getBlockZ());
+        player.sendMessage("");
+        player.sendMessage("§a§lПорт §e" + port.getName() + " §a§lготов к работе!");
+        player.sendMessage("§7Используйте: §e/port connect " + port.getName() + " <другой_порт>");
+        
+        return true;
+    }
+    
+    /**
+     * Visualize navigation point with particles (NEW!)
+     */
+    private void visualizeNavigationPoint(Location location) {
+        location.getWorld().spawnParticle(
+            Particle.END_ROD,
+            location.clone().add(0.5, 1.5, 0.5),
+            30,
+            0.5, 0.5, 0.5,
+            0.1
+        );
+        
+        location.getWorld().spawnParticle(
+            Particle.NAUTILUS,
+            location.clone().add(0.5, 1, 0.5),
+            20,
+            0.3, 0.3, 0.3,
+            0.05
         );
     }
 }

@@ -27,6 +27,11 @@ public class PortCommand implements CommandExecutor {
             return true;
         }
 
+        // === ЭКСПОРТ ПОЛНОЙ СИСТЕМЫ ===
+        if (args.length > 0 && args[0].equalsIgnoreCase("export-full")) {
+            return new com.example.boatroutes.commands.FullExportCommand(this.plugin).onCommand(sender, cmd, label, args);
+        }
+
         if (args.length == 0) {
             sendHelp(player);
             return true;

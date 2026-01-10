@@ -38,6 +38,7 @@ public class NPCListener implements Listener {
         ItemMeta meta = item.getItemMeta();
         NamespacedKey portKey = new NamespacedKey(plugin, "port_name");
         
+        // Handle NPC spawn egg
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK &&
             item.getType() == Material.VILLAGER_SPAWN_EGG &&
             meta.getPersistentDataContainer().has(portKey, PersistentDataType.STRING)) {
@@ -46,10 +47,19 @@ public class NPCListener implements Listener {
             return;
         }
         
+        // Handle dock marker
         if ((event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) &&
             plugin.getDockManager().getDockPlacer().isDockMarker(item)) {
             
             handleDockMarker(event, player, item);
+            return;
+        }
+        
+        // НОВОЕ: Handle navigation point marker (ТОЧНО ТАК ЖЕ как dock marker!)
+        if ((event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) &&
+            plugin.getDockManager().getDockPlacer().isNavigationPointMarker(item)) {
+            
+            handleNavigationPointMarker(event, player, item);
             return;
         }
     }
@@ -128,6 +138,44 @@ public class NPCListener implements Listener {
         }
     }
     
+    /**
+     * НОВЫЙ МЕТОД: Handle navigation point marker (КОПИЯ handleDockMarker!)
+     */
+    private void handleNavigationPointMarker(PlayerInteractEvent event, Player player, ItemStack item) {
+        event.setCancelled(true);
+        
+        String portName = plugin.getDockManager().getDockPlacer().getPortNameFromNavMarker(item);
+        if (portName == null) {
+            player.sendMessage("§cInvalid navigation point marker!");
+            return;
+        }
+        
+        Port port = plugin.getPortManager().getPort(portName);
+        if (port == null) {
+            player.sendMessage("§cPort not found!");
+            return;
+        }
+        
+        // ИСПОЛЬЗУЕМ ТОТ ЖЕ findWaterBlock()!
+        Block waterBlock = findWaterBlock(player, event);
+        
+        if (waterBlock == null) {
+            player.sendMessage("§cNo water found!");
+            player.sendMessage("§7Try: Aim at water, stand IN water, or click water from side");
+            return;
+        }
+        
+        Location navPointLoc = waterBlock.getLocation();
+        
+        // Set navigation point
+        boolean success = plugin.getDockManager().getDockPlacer()
+            .setNavigationPoint(port, navPointLoc, player);
+        
+        if (success) {
+            item.setAmount(item.getAmount() - 1);
+        }
+    }
+    
     private Block findWaterBlock(Player player, PlayerInteractEvent event) {
         if (event.getClickedBlock() != null && isWater(event.getClickedBlock().getType())) {
             return event.getClickedBlock();
@@ -180,14 +228,11 @@ public class NPCListener implements Listener {
         
         if (!port.isFullySetup()) {
             player.sendMessage("§cPort is not fully set up yet!");
-            player.sendMessage("§7Need to place " + plugin.getConfig().getInt("port.docks-per-port", 3) + " docks");
+            player.sendMessage("§7Missing: " + getMissingComponents(port));
             return;
         }
         
-        plugin.getBoatManager().setCreationPort(player.getUniqueId(), port.getName());
-        
-        PortGUI gui = new PortGUI(plugin, port, player);
-        gui.open();
+        new PortGUI(plugin, port, player).open();
     }
     
     private Port findPortByNPC(Villager npc) {
@@ -197,5 +242,12 @@ public class NPCListener implements Listener {
             }
         }
         return null;
+    }
+    
+    private String getMissingComponents(Port port) {
+        if (port.getNPCLocation() == null) return "NPC";
+        if (port.getDocks().isEmpty()) return "Docks";
+        if (port.getNavigationPoint() == null) return "Navigation Point";
+        return "Unknown";
     }
 }

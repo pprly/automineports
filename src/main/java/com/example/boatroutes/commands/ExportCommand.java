@@ -1,15 +1,12 @@
 package com.example.boatroutes.commands;
 
+import com.example.boatroutes.BoatRoutesPlugin;
+import com.example.boatroutes.cache.WaterWorldCache; // ИСПРАВЛЕНО: правильный пакет!
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -18,12 +15,15 @@ import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Экспорт кеша для визуализатора (использует готовый WaterWorldCache!)
+ * Команда: /export-cache <radius>
+ */
 public class ExportCommand implements CommandExecutor {
 
-    private static final int WATER_LEVEL = 62;
-    private final JavaPlugin plugin;
+    private final BoatRoutesPlugin plugin;
 
-    public ExportCommand(JavaPlugin plugin) {
+    public ExportCommand(BoatRoutesPlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -38,7 +38,7 @@ public class ExportCommand implements CommandExecutor {
 
         if (args.length < 1) {
             player.sendMessage("§e╔══════════════════════════════╗");
-            player.sendMessage("§e║   Экспорт карты для          ║");
+            player.sendMessage("§e║   Экспорт кеша для           ║");
             player.sendMessage("§e║   визуализатора              ║");
             player.sendMessage("§e╚══════════════════════════════╝");
             player.sendMessage("");
@@ -50,6 +50,8 @@ public class ExportCommand implements CommandExecutor {
             player.sendMessage("§7Рекомендуемые значения:");
             player.sendMessage("§7  • 30-50 для тестов");
             player.sendMessage("§7  • 100-150 для больших карт");
+            player.sendMessage("");
+            player.sendMessage("§7Экспортирует готовый кеш (быстро!)");
             return true;
         }
 
@@ -71,33 +73,48 @@ public class ExportCommand implements CommandExecutor {
 
         player.sendMessage("");
         player.sendMessage("§a╔══════════════════════════════╗");
-        player.sendMessage("§a║  Экспорт кеша мира           ║");
+        player.sendMessage("§a║  Экспорт кеша (из памяти)    ║");
         player.sendMessage("§a╚══════════════════════════════╝");
         player.sendMessage("");
         player.sendMessage("§7Твоя позиция: §f" + centerX + ", " + centerZ);
         player.sendMessage("§7Радиус: §f" + radius + " чанков (§e" + (radius * 16) + " блоков§f)");
         player.sendMessage("§7Файл: §f" + exportFile.getName());
         player.sendMessage("");
-        player.sendMessage("§eЗапускаю экспорт... §7Это займёт время.");
-        player.sendMessage("§7Следи за прогрессом в консоли сервера.");
+        player.sendMessage("§eЗапускаю экспорт из кеша...");
         player.sendMessage("");
 
-        // Экспорт в отдельном потоке чтобы не лагать
-        new Thread(() -> {
+        // Экспорт в async потоке (безопасно - читаем только из памяти!)
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                exportCache(player.getWorld(), centerX, centerZ, radius, exportFile);
+                long startTime = System.currentTimeMillis();
+
+                WorldCache cache = exportFromCache(player.getWorld().getName(), centerX, centerZ, radius);
+
+                // Сохраняем в JSON
+                Gson gson = new GsonBuilder().setPrettyPrinting().create();
+                FileWriter writer = new FileWriter(exportFile);
+                gson.toJson(cache, writer);
+                writer.close();
+
+                long elapsed = System.currentTimeMillis() - startTime;
 
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     player.sendMessage("");
                     player.sendMessage("§a✓ Экспорт завершён успешно!");
                     player.sendMessage("");
-                    player.sendMessage("§fФайл сохранён:");
-                    player.sendMessage("§e" + exportFile.getAbsolutePath());
+                    player.sendMessage("§fСтатистика:");
+                    player.sendMessage("§7  • Чанков: §f" + cache.chunks.size());
+                    player.sendMessage("§7  • Из кеша: §a" + cache.cachedChunks);
+                    player.sendMessage("§7  • Пропущено: §7" + cache.skippedChunks);
+                    player.sendMessage("§7  • Время: §f" + elapsed + " мс");
+                    player.sendMessage("");
+                    player.sendMessage("§fФайл: §e" + exportFile.getName());
                     player.sendMessage("");
                     player.sendMessage("§7Следующие шаги:");
-                    player.sendMessage("§71. Скопируй файл cache_export.json");
-                    player.sendMessage("§72. Запусти визуализатор на компьютере");
-                    player.sendMessage("§73. Загрузи JSON и создавай порты!");
+                    player.sendMessage("§71. Открой PortSystemVisualizer.java");
+                    player.sendMessage("§72. Нажми 'Импорт кеша (cache_export)'");
+                    player.sendMessage("§73. Выбери файл cache_export.json");
+                    player.sendMessage("§74. Увидишь карту воды/земли!");
                     player.sendMessage("");
                 });
             } catch (Exception e) {
@@ -109,7 +126,7 @@ public class ExportCommand implements CommandExecutor {
                 });
                 e.printStackTrace();
             }
-        }).start();
+        });
 
         return true;
     }
@@ -118,6 +135,7 @@ public class ExportCommand implements CommandExecutor {
     static class CachedChunk {
         int chunkX, chunkZ;
         int[][] waterCosts;
+
         CachedChunk(int x, int z) {
             chunkX = x;
             chunkZ = z;
@@ -130,120 +148,83 @@ public class ExportCommand implements CommandExecutor {
         int centerX, centerZ;
         List<CachedChunk> chunks;
         long timestamp;
+        int cachedChunks;   // Статистика: из кеша
+        int skippedChunks;  // Статистика: пропущено
+
         WorldCache(String name, int x, int z) {
             worldName = name;
             centerX = x;
             centerZ = z;
             chunks = new ArrayList<>();
             timestamp = System.currentTimeMillis();
+            cachedChunks = 0;
+            skippedChunks = 0;
         }
     }
 
-    private void exportCache(World world, int cx, int cz, int radius, File file) throws Exception {
-        WorldCache cache = new WorldCache(world.getName(), cx, cz);
+    /**
+     * НОВОЕ: Экспорт из готового кеша (быстро!)
+     */
+    private WorldCache exportFromCache(String worldName, int cx, int cz, int radius) {
+        WorldCache worldCache = new WorldCache(worldName, cx, cz);
+
+        // Получаем кеш из PathfindingManager
+        WaterWorldCache waterCache = plugin.getPathfindingManager().getCache();
 
         int centerChunkX = cx >> 4;
         int centerChunkZ = cz >> 4;
         int totalChunks = (radius * 2 + 1) * (radius * 2 + 1);
-        int processed = 0;
 
         Bukkit.getLogger().info("═══════════════════════════════");
-        Bukkit.getLogger().info("[CacheExport] Начинаем экспорт");
+        Bukkit.getLogger().info("[CacheExport] Экспорт из кеша");
         Bukkit.getLogger().info("[CacheExport] Центр: " + cx + ", " + cz);
         Bukkit.getLogger().info("[CacheExport] Радиус: " + radius + " чанков");
         Bukkit.getLogger().info("[CacheExport] Всего чанков: " + totalChunks);
         Bukkit.getLogger().info("═══════════════════════════════");
 
-        long startTime = System.currentTimeMillis();
-
         for (int chunkX = centerChunkX - radius; chunkX <= centerChunkX + radius; chunkX++) {
             for (int chunkZ = centerChunkZ - radius; chunkZ <= centerChunkZ + radius; chunkZ++) {
 
-                if (!world.isChunkLoaded(chunkX, chunkZ)) {
-                    world.loadChunk(chunkX, chunkZ);
-                }
+                CachedChunk exported = new CachedChunk(chunkX, chunkZ);
+                boolean foundInCache = false;
 
-                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
-                CachedChunk cached = new CachedChunk(chunkX, chunkZ);
+                // Проверяем все блоки в чанке (16x16)
+                for (int localX = 0; localX < 16; localX++) {
+                    for (int localZ = 0; localZ < 16; localZ++) {
+                        int worldX = (chunkX << 4) + localX;
+                        int worldZ = (chunkZ << 4) + localZ;
 
-                // Анализируем каждый блок в чанке на уровне воды
-                for (int x = 0; x < 16; x++) {
-                    for (int z = 0; z < 16; z++) {
-                        Block block = chunk.getBlock(x, WATER_LEVEL, z);
+                        // Получаем из кеша cost
+                        Integer cost = waterCache.getCost(worldX, worldZ);
 
-                        if (isWater(block.getType())) {
-                            int worldX = (chunkX << 4) + x;
-                            int worldZ = (chunkZ << 4) + z;
-                            cached.waterCosts[x][z] = calculateShoreDistance(world, worldX, worldZ);
+                        if (cost != null) {
+                            // Есть в кеше!
+                            exported.waterCosts[localX][localZ] = cost;
+                            foundInCache = true;
                         } else {
-                            cached.waterCosts[x][z] = 100; // Суша = непроходимо
+                            // Нет в кеше - дефолтное значение
+                            exported.waterCosts[localX][localZ] = 1; // Вода по умолчанию
                         }
                     }
                 }
 
-                cache.chunks.add(cached);
-                processed++;
+                worldCache.chunks.add(exported);
 
-                // Прогресс каждые 100 чанков
-                if (processed % 100 == 0) {
-                    int percent = (processed * 100) / totalChunks;
-                    Bukkit.getLogger().info(String.format(
-                            "[CacheExport] Прогресс: %d/%d (%d%%)",
-                            processed, totalChunks, percent
-                    ));
+                if (foundInCache) {
+                    worldCache.cachedChunks++;
+                } else {
+                    worldCache.skippedChunks++;
                 }
             }
         }
-
-        long endTime = System.currentTimeMillis();
-        double seconds = (endTime - startTime) / 1000.0;
-
-        // Сохраняем в JSON
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        FileWriter writer = new FileWriter(file);
-        gson.toJson(cache, writer);
-        writer.close();
 
         Bukkit.getLogger().info("═══════════════════════════════");
         Bukkit.getLogger().info("[CacheExport] ✓ Экспорт завершён!");
-        Bukkit.getLogger().info("[CacheExport] Файл: " + file.getAbsolutePath());
-        Bukkit.getLogger().info("[CacheExport] Чанков обработано: " + processed);
-        Bukkit.getLogger().info("[CacheExport] Время: " + String.format("%.1f", seconds) + " сек");
+        Bukkit.getLogger().info("[CacheExport] Из кеша: " + worldCache.cachedChunks);
+        Bukkit.getLogger().info("[CacheExport] Пропущено: " + worldCache.skippedChunks);
+        Bukkit.getLogger().info("[CacheExport] Всего: " + worldCache.chunks.size());
         Bukkit.getLogger().info("═══════════════════════════════");
-    }
 
-    /**
-     * Вычисляет расстояние от воды до ближайшей суши
-     * Возвращает стоимость для навигации
-     */
-    private int calculateShoreDistance(World world, int x, int z) {
-        int minDistance = 6; // Максимум проверяем 5 блоков вокруг
-
-        // Проверяем все блоки в радиусе 5
-        for (int dx = -5; dx <= 5; dx++) {
-            for (int dz = -5; dz <= 5; dz++) {
-                if (dx == 0 && dz == 0) continue;
-
-                Block neighbor = world.getBlockAt(x + dx, WATER_LEVEL, z + dz);
-
-                if (!isWater(neighbor.getType())) {
-                    // Нашли сушу - вычисляем расстояние (Чебышевское)
-                    int distance = Math.max(Math.abs(dx), Math.abs(dz));
-                    minDistance = Math.min(minDistance, distance);
-                }
-            }
-        }
-
-        // Преобразуем расстояние в стоимость для A*
-        if (minDistance >= 6) return 1;  // Глубокая вода (самая низкая стоимость)
-        if (minDistance == 5) return 1;  // 5 блоков от берега
-        if (minDistance == 4) return 2;  // 4 блока от берега
-        if (minDistance == 3) return 3;  // 3 блока от берега
-        if (minDistance == 2) return 4;  // 2 блока от берега
-        return 5;                        // 1 блок от берега (высокая стоимость)
-    }
-
-    private boolean isWater(Material material) {
-        return material == Material.WATER;
+        return worldCache;
     }
 }

@@ -63,7 +63,7 @@ port:
 # ===== BOAT SETTINGS =====
 boat:
   # Default boat speed (blocks per tick)
-  default-speed: 0.35
+  default-speed: 2.0
   
   # Maximum velocity cap
   max-velocity: 4.0

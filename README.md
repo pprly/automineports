@@ -1,398 +1,229 @@
-# 🚢 BoatRoutes - COMPLETE AUTOPILOT SYSTEM
+# 💾 BoatRoutes - Data Persistence Fix (ГОТОВЫЕ ФАЙЛЫ)
 
-**Версия:** v6.0-AUTOPILOT-COMPLETE  
-**Дата:** 9 января 2026  
-**Статус:** ✅ Полностью готово к установке
+## ✅ ЧТО ВНУТРИ:
 
----
-
-## 📦 ФАЙЛЫ В АРХИВЕ (7 файлов)
+Все 4 файла **ПОЛНОСТЬЮ ГОТОВЫ** к использованию!
 
 ```
-boatroutes-autopilot-complete/
-└── src/main/java/com/example/boatroutes/
-    ├── cache/
-    │   └── WaterWorldCache.java          [ЗАМЕНИТЬ]
-    ├── pathfinding/
-    │   └── PathValidator.java            [ЗАМЕНИТЬ]
-    ├── navigation/
-    │   ├── NavigationGUI.java            [ЗАМЕНИТЬ]
-    │   ├── BoatAutopilot.java            [НОВЫЙ/ЗАМЕНИТЬ]
-    │   └── NavigationManager.java        [ЗАМЕНИТЬ]
-    ├── gui/
-    │   └── GUIListener.java              [ЗАМЕНИТЬ]
-    └── listeners/
-        └── VehicleListener.java          [ЗАМЕНИТЬ]
+boatroutes-persistence-ready/
+├── src/main/java/com/example/boatroutes/
+│   ├── BoatRoutesPlugin.java      ← ГОТОВ!
+│   ├── port/
+│   │   ├── PortStorage.java       ← ГОТОВ!
+│   │   └── PortManager.java       ← ГОТОВ!
+│   └── npc/
+│       └── NPCManager.java        ← ГОТОВ!
+└── README.md                       ← ТЫ ЗДЕСЬ
 ```
 
 ---
 
-## ✅ ЧТО ИСПРАВЛЕНО И ДОБАВЛЕНО
+## 🚀 УСТАНОВКА (2 СПОСОБА):
 
-### 1. **WaterWorldCache.java** - Thread-Safe ✅
-- `HashMap` → `ConcurrentHashMap`
-- Не падает при одновременной записи
+### Способ 1: Через IntelliJ (ПРОЩЕ!)
 
-### 2. **PathValidator.java** - Cost Calculation ✅
-- Pre-cache вычисляет cost для каждого блока
-- Проверяет 8 соседей
-- Лодки плывут по центру реки!
-
-### 3. **NavigationGUI.java** - Bidirectional Paths ✅
-- Проверяет путь в ОБЕ стороны (A→B и B→A)
-- Показывает порты даже если путь только в одну сторону
-
-### 4. **BoatAutopilot.java** - AUTO-PILOT! 🚤 ✅
-- Автоматическое движение лодки по waypoints
-- Velocity-based navigation
-- Progress tracking (action bar)
-- Автореверс пути если нужно
-- Arrival detection
-
-### 5. **NavigationManager.java** - Управление Autopilots ✅
-- Хранит активные autopilots
-- Останавливает при выходе из лодки
-- Останавливает все при выключении сервера
-
-### 6. **GUIListener.java** - Запуск Autopilot ✅
-- Обрабатывает клик на порт в GUI
-- Проверяет что игрок в лодке
-- Запускает BoatAutopilot
-- Сохраняет в NavigationManager
-
-### 7. **VehicleListener.java** - Stop Autopilot ✅
-- Останавливает autopilot при выходе из лодки
-- Убирает navigation book
+1. Распакуй `boatroutes-persistence-ready.zip`
+2. Открой свой проект BoatRoutes в IntelliJ
+3. В левом меню найди папки:
+   - `src/main/java/com/example/boatroutes/`
+   - `src/main/java/com/example/boatroutes/port/`
+   - `src/main/java/com/example/boatroutes/npc/`
+4. **Перетащи файлы** из архива в соответствующие папки:
+   - `BoatRoutesPlugin.java` → в `boatroutes/`
+   - `PortStorage.java` → в `boatroutes/port/`
+   - `PortManager.java` → в `boatroutes/port/`
+   - `NPCManager.java` → в `boatroutes/npc/`
+5. IntelliJ спросит "Replace?" → **ДА для всех!**
+6. Готово! ✅
 
 ---
 
-## 🔧 УСТАНОВКА
+### Способ 2: Через терминал
 
-### Шаг 1: Скопировать файлы
-```
-Распакуй архив
-Скопируй папку src/ в корень проекта
-Файлы заменятся автоматически
-```
-
-### Шаг 2: Исправить WaterPathfinderAStar.java
-**КРИТИЧЕСКИ ВАЖНО!**
-
-В **WaterPathfinderAStar.java** найди метод `isWaterCached()`:
-
-**БЫЛО:**
-```java
-private boolean isWaterCached(int x, int z) {
-    Boolean result = cache.isWater(x, z);
-    if (result != null) return result;
-    return true;  // ← ПРОБЛЕМА! Идёт сквозь материк!
-}
-```
-
-**СТАЛО:**
-```java
-private boolean isWaterCached(int x, int z) {
-    Boolean result = cache.isWater(x, z);
-    if (result != null) return result;
-    return false;  // ← ИСПРАВЛЕНО!
-}
-```
-
-### Шаг 3: Компиляция
 ```bash
+# Распакуй архив
+unzip boatroutes-persistence-ready.zip
+
+# Перейди в папку своего проекта
+cd ~/BoatRoutes
+
+# Скопируй все 4 файла
+cp boatroutes-persistence-ready/src/main/java/com/example/boatroutes/BoatRoutesPlugin.java \
+   src/main/java/com/example/boatroutes/
+
+cp boatroutes-persistence-ready/src/main/java/com/example/boatroutes/port/PortStorage.java \
+   src/main/java/com/example/boatroutes/port/
+
+cp boatroutes-persistence-ready/src/main/java/com/example/boatroutes/port/PortManager.java \
+   src/main/java/com/example/boatroutes/port/
+
+cp boatroutes-persistence-ready/src/main/java/com/example/boatroutes/npc/NPCManager.java \
+   src/main/java/com/example/boatroutes/npc/
+```
+
+---
+
+## 🔨 КОМПИЛЯЦИЯ:
+
+```bash
+cd ~/BoatRoutes
 ./gradlew clean build
 ```
 
-### Шаг 4: Установка
-```bash
-# 1. Остановить сервер
-# 2. (Опционально) Удалить water_cache.yml
-# 3. Заменить BoatRoutes.jar
-# 4. Запустить сервер
+Если успешно:
 ```
+BUILD SUCCESSFUL in 5s
+```
+
+Jar файл будет в: `build/libs/BoatRoutes-X.X.X.jar`
 
 ---
 
-## 🧪 ПОЛНОЕ ТЕСТИРОВАНИЕ
+## 🚀 УСТАНОВКА НА СЕРВЕР:
 
-### Тест 1: Создание маршрута
 ```bash
-# Погуляй по миру 10 минут (для passive caching)
+# 1. Останови сервер
+/stop
 
-# Создай порты
-/port create spawn
-/port create north  # (500-1000 блоков от spawn)
+# 2. Замени плагин
+cp build/libs/BoatRoutes-*.jar /path/to/server/plugins/BoatRoutes.jar
 
-# Соедини
-/port connect spawn north
+# 3. Запусти сервер
+./start.sh
 
-# ПРОВЕРЬ ЛОГИ:
-# ✓ PATH FOUND!
-# Average block cost: 1.8 (1=deep water, 5=shore)
-```
-
-### Тест 2: Визуализация (опционально)
-```bash
-/port visualize north
-
-# Путь должен:
-# ✅ Идти по центру реки
-# ✅ Избегать берегов
-# ✅ НЕ идти сквозь материк
-```
-
-### Тест 3: АВТОПИЛОТ! 🚤
-```bash
-# В порту spawn, кликни на жителя
-# Нажми "Create New Boat"
-# Сядь в лодку → получишь Navigation Book
-
-# Открой книжку (ПКМ)
-# → Должен увидеть "north" в списке!
-
-# Нажми на "north"
-# → Лодка начнёт двигаться автоматически!
-
-# ПРОВЕРЬ:
-# ✅ Action bar показывает прогресс
-# ✅ Лодка движется плавно
-# ✅ Следует по пути
-# ✅ Прибывает в порт north
-```
-
-### Тест 4: Обратный путь (bidirectional)
-```bash
-# Теперь ты в порту north
-# Сядь в лодку (новую или ту же)
-# Открой Navigation Book
-
-# → Должен увидеть "spawn" в списке! ✅
-# (Хотя создавали только spawn → north)
-
-# Нажми "spawn"
-# → Лодка поплывёт обратно! (автореверс пути)
-```
-
-### Тест 5: Остановка autopilot
-```bash
-# Во время движения
-# Выйди из лодки (Shift)
-
-# ПРОВЕРЬ:
-# ✅ Autopilot остановился
-# ✅ Лодка перестала двигаться
-# ✅ Navigation Book исчез
-```
-
----
-
-## 📊 ОЖИДАЕМЫЕ ЛОГИ
-
-### При запуске сервера:
-```
+# 4. Проверь логи:
+[BoatRoutes] Loading data...
+[BoatRoutes] Loaded 2 ports
+[BoatRoutes]   Loaded port: spawn
+[BoatRoutes]   Loaded port: north
+[BoatRoutes]   Respawned NPC for port: spawn
+[BoatRoutes]   Respawned NPC for port: north
+[BoatRoutes] Respawned 2 NPCs
+[BoatRoutes] Saved 2 ports to ports.yml
 [BoatRoutes] BoatRoutes v6.0 enabled successfully!
-[BoatRoutes] Features: Cost-based A*, Passive Caching, Autopilot
-```
-
-### При создании пути:
-```
-[BoatRoutes] === A* PATHFINDING v6.0 (COST SYSTEM) ===
-[BoatRoutes] ✓ PATH FOUND!
-[BoatRoutes] Average block cost: 1.8 (1=deep water, 5=shore)
-[BoatRoutes] Time: 0.031s
-```
-
-### При загрузке чанков (passive caching):
-```
-[BoatRoutes] [Passive Cache] Processed 10 chunks, cached 2,560 blocks
-[BoatRoutes] [Passive Cache] Processed 20 chunks, cached 5,120 blocks
-```
-
-### При запуске autopilot:
-```
-[BoatRoutes] Starting autopilot: ErikEpperly from spawn to north
-[BoatRoutes] ✓ Using forward path: spawn → north
-[BoatRoutes] ✓ Autopilot started successfully!
-[BoatRoutes] Active autopilots: 1
-```
-
-### При выходе из лодки:
-```
-[BoatRoutes] Stopped autopilot for ErikEpperly (exited boat)
-[BoatRoutes] Active autopilots: 0
 ```
 
 ---
 
-## 🎯 КАК ЭТО РАБОТАЕТ
+## 🧪 ТЕСТИРОВАНИЕ:
 
-### Полный цикл:
+```bash
+# 1. Создай порт
+/port create testport
 
-```
-1. Игрок кликает на жителя в порту
-   ↓
-2. Открывается Port GUI
-   ↓
-3. Нажимает "Create New Boat"
-   ↓
-4. Лодка спавнится у дока
-   ↓
-5. Игрок садится в лодку
-   ↓ (VehicleListener.onVehicleEnter)
-6. Получает Navigation Book
-   ↓
-7. Открывает книжку (ПКМ)
-   ↓ (GUIListener.onPlayerInteract)
-8. Открывается Navigation GUI со списком портов
-   ↓
-9. Выбирает порт назначения (например "north")
-   ↓ (GUIListener.onInventoryClick)
-10. Создаётся BoatAutopilot
-    ↓
-11. Загружается путь (forward или reverse)
-    ↓
-12. Запускается BukkitTask (каждый тик)
-    ↓
-13. Лодка движется по waypoints
-    ↓ (BoatAutopilot.updateBoatMovement)
-14. Показывает прогресс в action bar
-    ↓
-15. Прибывает в порт назначения
-    ↓
-16. Autopilot останавливается
-    ↓
-17. Игрок выходит из лодки
-    ↓ (VehicleListener.onVehicleExit)
-18. Navigation Book исчезает
-    ↓
-19. Autopilot удаляется из NavigationManager
-```
+# 2. Установи NPC, доки, navigation point
 
-### Bidirectional работа:
+# 3. Перезапусти сервер
+/stop
+./start.sh
 
-```
-Создан путь: spawn → north
-
-В порту spawn:
-→ GUI показывает "north" (прямой путь)
-→ Autopilot использует spawn → north
-
-В порту north:
-→ GUI показывает "spawn" (обратный путь)
-→ Autopilot загружает north → spawn
-→ Путь НЕ найден
-→ Пробует spawn → north
-→ Collections.reverse(path)
-→ Плывёт по обратному пути!
+# 4. Проверь что всё на месте:
+- Кликни на NPC → GUI открылось? ✅
+- /port info testport → Доки и navigation point есть? ✅
+- Лодки работают? ✅
 ```
 
 ---
 
-## 🐛 TROUBLESHOOTING
+## ✅ ЧТО ИСПРАВЛЕНО:
 
-### "При нажатии на порт ничего не происходит"
-**Причина:** GUIListener.java не заменён
+После установки:
+- ✅ Порты сохраняются после перезапуска
+- ✅ NPCs автоматически возрождаются
+- ✅ Доки восстанавливаются
+- ✅ Navigation points работают
+- ✅ Пути между портами сохраняются
 
-**Решение:**
-```bash
-# Проверь что в GUIListener.java есть:
-private void startAutopilot(Player player, String destinationPort) {
-    ...
-}
-```
+---
 
-### "You must be in a boat to navigate!"
-**Причина:** Игрок не в лодке
+## 📝 СТРУКТУРА ports.yml:
 
-**Решение:**
-```bash
-# Сначала создай лодку через Port GUI
-# Потом садись в неё
-# Потом открывай Navigation Book
-```
+После установки файл `plugins/BoatRoutes/ports.yml` будет выглядеть так:
 
-### "Cannot determine current port!"
-**Причина:** BoatManager не знает текущий порт
-
-**Решение:**
-```bash
-# Проверь что VehicleListener правильно устанавливает порт:
-plugin.getBoatManager().setCreationPort(player.getUniqueId(), currentPort.getName());
-```
-
-### "Autopilot started но лодка не двигается"
-**Причина 1:** Путь не найден (ни forward ни reverse)
-
-**Решение:**
-```bash
-# Проверь что путь существует:
-/port connect spawn north
-
-# Проверь логи:
-# [BoatRoutes] ✓ Using forward path: spawn → north
-# ИЛИ
-# [BoatRoutes] ✓ Using reversed path: north → spawn
-```
-
-**Причина 2:** WaterPathfinderAStar.java не исправлен
-
-**Решение:**
-```java
-// В isWaterCached():
-return false;  // вместо return true;
-```
-
-### "Лодка идёт сквозь материк"
-**Причина:** WaterPathfinderAStar.java не исправлен!
-
-**Решение:**
-```java
-// В WaterPathfinderAStar.java метод isWaterCached():
-private boolean isWaterCached(int x, int z) {
-    Boolean result = cache.isWater(x, z);
-    if (result != null) return result;
-    return false;  // ← ОБЯЗАТЕЛЬНО FALSE!
-}
-```
-
-### "ClassCastException HashMap$Node"
-**Причина:** WaterWorldCache.java не заменён
-
-**Решение:**
-```java
-// Проверь в WaterWorldCache.java:
-import java.util.concurrent.ConcurrentHashMap;
-private final Map<Long, BlockData> cache = new ConcurrentHashMap<>();
+```yaml
+ports:
+  spawn:
+    npc-location:
+      world: world
+      x: 100.5
+      y: 64.0
+      z: 200.5
+    npc-uuid: "12345678-1234-1234-1234-123456789abc"
+    navigation-point:
+      world: world
+      x: 95.5
+      y: 64.0
+      z: 195.5
+    docks:
+      - number: 1
+        location:
+          world: world
+          x: 102.5
+          y: 64.0
+          z: 198.5
+      - number: 2
+        location:
+          world: world
+          x: 98.5
+          y: 64.0
+          z: 202.5
+      - number: 3
+        location:
+          world: world
+          x: 105.5
+          y: 64.0
+          z: 203.5
+    creator: "player-uuid"
+    created-at: 1736446800000
 ```
 
 ---
 
-## 🎉 ФИНАЛЬНЫЙ ЧЕКЛИСТ
+## 🔍 ЧТО ИЗМЕНИЛОСЬ В КАЖДОМ ФАЙЛЕ:
 
-- [ ] Скопированы все 7 файлов
-- [ ] Исправлен WaterPathfinderAStar.java (return false;)
-- [ ] Скомпилирован проект
-- [ ] Установлен на сервер
-- [ ] Создан маршрут (`/port connect`)
-- [ ] Создана лодка через Port GUI
-- [ ] Получена Navigation Book
-- [ ] Autopilot запустился
-- [ ] Лодка движется автоматически
-- [ ] Прибыла в порт назначения
-- [ ] Работает обратный путь (bidirectional)
-- [ ] Autopilot останавливается при выходе
+### PortStorage.java
+- ✅ Добавлено сохранение/загрузка navigation-point
+- ✅ Добавлено сохранение/загрузка docks
+- ✅ Улучшена работа с NPC UUID
+- ✅ Backward compatibility со старыми ports.yml
+
+### PortManager.java
+- ✅ Добавлен метод `respawnAllNPCs()`
+- ✅ Вызов respawn после `loadAllPorts()`
+
+### NPCManager.java
+- ✅ Добавлен метод `respawnNPC(Port port)`
+- ✅ Chunk loading
+- ✅ Удаление старых NPC
+- ✅ Обновление UUID
+
+### BoatRoutesPlugin.java
+- ✅ Добавлен вызов `portManager.saveAllPorts()` после загрузки
+- ✅ Обновление UUID в файле после respawn
 
 ---
 
-## 🚀 ГОТОВО!
+## 🐛 TROUBLESHOOTING:
 
-Теперь у тебя полноценная система автопилота:
+**Ошибка компиляции:**
+→ Проверь что все 4 файла на месте
+→ Попробуй `./gradlew clean` потом `./gradlew build`
 
-- ✅ Cost-based pathfinding (избегает берегов)
-- ✅ Bidirectional paths (один путь = обе стороны)
-- ✅ Autopilot (автоматическое движение)
-- ✅ Progress tracking (action bar с прогрессом)
-- ✅ Thread-safe caching (не лагает)
-- ✅ Passive caching (автоматическое наполнение)
+**NPCs не появляются:**
+→ Проверь логи: должно быть "Respawned X NPCs"
+→ Проверь что world загружен
 
-**Протестируй и наслаждайся!** 🎉🚤
+**ports.yml не обновляется:**
+→ Проверь что добавлена строка `portManager.saveAllPorts()` в onEnable()
+
+**Старые порты не работают:**
+→ Это нормально! Система обратно совместима
+→ Navigation-point создастся из convergence-point автоматически
+
+---
+
+## 🎉 ГОТОВО!
+
+Теперь все данные будут сохраняться после перезапуска сервера!
+
+Порты, NPCs, доки, navigation points - всё останется на месте! 🚀

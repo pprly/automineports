@@ -115,6 +115,9 @@ public class PortManager {
         ports.putAll(loadedPorts);
         
         plugin.getLogger().info("Loaded " + ports.size() + " ports");
+        
+        // Respawn NPCs after loading
+        respawnAllNPCs();
     }
     
     /**
@@ -130,5 +133,23 @@ public class PortManager {
      */
     public void savePort(Port port) {
         portStorage.save(port);
+    }
+    
+    /**
+     * Respawn NPCs for all loaded ports
+     */
+    private void respawnAllNPCs() {
+        int respawnedCount = 0;
+        
+        for (Port port : ports.values()) {
+            if (port.getNPCLocation() != null) {
+                boolean success = plugin.getNPCManager().respawnNPC(port);
+                if (success) {
+                    respawnedCount++;
+                }
+            }
+        }
+        
+        plugin.getLogger().info("Respawned " + respawnedCount + " NPCs");
     }
 }

@@ -142,20 +142,25 @@ public class PathfindingManager {
             rawPathCache.put(routeId, new ArrayList<>(rawPath));
             plugin.getLogger().info("✓ Cached raw path for visualization: " + rawPath.size() + " waypoints");
 
-            // ===== PHASE 4: Optimize path =====
-            long optimizeStart = System.currentTimeMillis();
+            // ===== PHASE 4: Optimize path (ОТКЛЮЧЕНО!) =====
+            // Оптимизация ОТКЛЮЧЕНА - используем RAW path для autopilot!
+            // Причина: оптимизированный путь срезает углы и идёт у берега
 
-            List<Location> optimizedPath = optimizer.optimize(rawPath);
+            // СТАРЫЙ КОД (закомментирован):
+            // long optimizeStart = System.currentTimeMillis();
+            // List<Location> optimizedPath = optimizer.optimize(rawPath);
+            // long optimizeTime = System.currentTimeMillis() - optimizeStart;
 
-            long optimizeTime = System.currentTimeMillis() - optimizeStart;
+            // НОВЫЙ КОД: используем RAW path напрямую!
+            List<Location> finalPath = new ArrayList<>(rawPath);
 
             // ===== PHASE 5: Save route =====
             Bukkit.getScheduler().runTask(plugin, () -> {
                 player.sendMessage("§a✓ Phase 4 complete");
-                player.sendMessage("§7  Optimized: §f" + optimizedPath.size() + " waypoints");
-                player.sendMessage("§7  Time: §f" + (optimizeTime / 1000.0) + "s");
+                player.sendMessage("§7  Waypoints: §f" + finalPath.size() + " (raw path)");
+                player.sendMessage("§7  Optimization: §cdisabled (using full path)");
 
-                storage.savePath(fromName, toName, optimizedPath);
+                storage.savePath(fromName, toName, finalPath);
 
                 long totalTime = System.currentTimeMillis() - preCacheStart;
                 int pathDistance = (int) finalNavStart.distance(finalNavEnd);
@@ -165,7 +170,7 @@ public class PathfindingManager {
                 player.sendMessage("§7From: §f" + fromName);
                 player.sendMessage("§7To: §f" + toName);
                 player.sendMessage("§7Distance: §f" + pathDistance + " blocks");
-                player.sendMessage("§7Waypoints: §f" + optimizedPath.size());
+                player.sendMessage("§7Waypoints: §f" + finalPath.size() + " (full path)");
                 player.sendMessage("§7Total time: §a" + (totalTime / 1000.0) + "s");
                 player.sendMessage("");
                 player.sendMessage("§7Use §f/port visualize " + fromName + " §7to see the route!");

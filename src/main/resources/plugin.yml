@@ -14,6 +14,7 @@ commands:
   export-cache:
     description: Export world cache for visualizer
     usage: /export-cache <radius>
+    permission: boatroutes.admin
 
 permissions:
   boatroutes.admin:

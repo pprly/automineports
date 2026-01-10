@@ -25,8 +25,13 @@ public class Port {
     private final List<Dock> docks;
     
     // Calculated points for pathfinding
-    private Location convergencePoint;  // Exit point (all boats converge here)
-    private Location splitPoint;        // Entry point (boats split to docks)
+    private Location navigationPoint;  // Single point for entry AND exit
+    
+    // Legacy fields (deprecated but kept for compatibility)
+    @Deprecated
+    private Location convergencePoint;
+    @Deprecated
+    private Location splitPoint;
     
     public Port(String name) {
         this.name = name;
@@ -61,11 +66,17 @@ public class Port {
     }
     
     public Location getConvergencePoint() {
-        return convergencePoint;
+        // Legacy support: return navigationPoint
+        return navigationPoint != null ? navigationPoint : convergencePoint;
     }
     
     public Location getSplitPoint() {
-        return splitPoint;
+        // Legacy support: return navigationPoint
+        return navigationPoint != null ? navigationPoint : splitPoint;
+    }
+    
+    public Location getNavigationPoint() {
+        return navigationPoint;
     }
     
     // === SETTERS ===
@@ -92,6 +103,13 @@ public class Port {
     
     public void setSplitPoint(Location splitPoint) {
         this.splitPoint = splitPoint;
+    }
+    
+    public void setNavigationPoint(Location navigationPoint) {
+        this.navigationPoint = navigationPoint;
+        // Also set legacy points for compatibility
+        this.convergencePoint = navigationPoint;
+        this.splitPoint = navigationPoint;
     }
     
     // === DOCK MANAGEMENT ===
@@ -126,8 +144,7 @@ public class Port {
     public boolean isFullySetup() {
         return npcLocation != null && 
                !docks.isEmpty() && 
-               convergencePoint != null && 
-               splitPoint != null;
+               navigationPoint != null;
     }
     
     @Override
